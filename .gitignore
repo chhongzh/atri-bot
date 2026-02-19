@@ -30,3 +30,8 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+atri-bot
+atri-bot.exe
+atri-bot.db
+config.yaml
