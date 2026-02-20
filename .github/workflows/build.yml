@@ -13,8 +13,35 @@ jobs:
       fail-fast: false
       matrix:
         go-version: ["1.26.x"]
-        os: [linux, windows, darwin]
-        arch: [amd64, arm64]
+        include:
+          - goos: android
+            goarch: 386
+          - goos: android
+            goarch: amd64
+          - goos: android
+            goarch: arm
+          - goos: android
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: linux
+            goarch: 386
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: 386
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm
+          - goos: windows
+            goarch: arm64
 
     steps:
       - name: Checkout
@@ -28,27 +55,27 @@ jobs:
 
       - name: Build
         env:
-          GOOS: ${{ matrix.os }}
-          GOARCH: ${{ matrix.arch }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
           COMMIT_SHA: ${{ github.sha }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -e
           mkdir -p dist
-          BIN_NAME="atri-bot-${{ matrix.os }}-${{ matrix.arch }}"
-          if [ "${{ matrix.os }}" = "windows" ]; then
+          BIN_NAME="atri-bot-${{ matrix.goos }}-${{ matrix.goarch }}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
             BIN_NAME="${BIN_NAME}.exe"
           fi
           BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          LDFLAGS="-s -w -X atri-bot.BuildVersion=${REF_NAME} -X atri-bot.BuildCommit=${COMMIT_SHA} -X atri-bot.BuildDate=${BUILD_DATE}"
+          LDFLAGS="-s -w -X main.BuildVersion=${REF_NAME} -X main.BuildCommit=${COMMIT_SHA} -X main.BuildDate=${BUILD_DATE}"
           echo "GOOS=${GOOS} GOARCH=${GOARCH} VERSION=${REF_NAME} COMMIT=${COMMIT_SHA} DATE=${BUILD_DATE}"
           go build -v -ldflags="$LDFLAGS" -o "dist/${BIN_NAME}" ./...
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: atri-bot-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/atri-bot-${{ matrix.os }}-${{ matrix.arch }}*
+          name: atri-bot-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/atri-bot-${{ matrix.goos }}-${{ matrix.goarch }}*
           if-no-files-found: error
 
   release:
