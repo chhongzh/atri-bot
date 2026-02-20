@@ -3,7 +3,7 @@ module atri-bot
 go 1.26.0
 
 require (
-	github.com/chhongzh/atri-core v1.0.0
+	github.com/chhongzh/atri-core v1.1.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/openai/openai-go/v3 v3.22.0
 	github.com/spf13/viper v1.21.0

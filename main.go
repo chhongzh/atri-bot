@@ -7,6 +7,9 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"os"
+	"runtime"
+	"time"
 
 	"github.com/chhongzh/atri-core"
 	"github.com/glebarez/sqlite"
@@ -14,6 +17,7 @@ import (
 	"github.com/openai/openai-go/v3/option"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"gorm.io/gorm"
 )
 
@@ -48,7 +52,10 @@ var (
 )
 
 func main() {
-	logger := initLogger()
+	logger, err := initLogger()
+	if err != nil {
+		panic(fmt.Sprintf("初始化日志记录器失败: %v", err))
+	}
 	defer logger.Sync()
 
 	if err := bootstrapConfig(logger); err != nil {
@@ -56,17 +63,17 @@ func main() {
 			logger.Info("配置模板已生成，请修改后重新运行", zap.String("file", configFileName))
 			return
 		}
-		logger.Fatal("配置引导失败", zap.Error(err))
+		exitWithError(logger, "配置引导失败", err)
 	}
 
 	var cfg Config
 	if err := loadConfig(logger, &cfg); err != nil {
-		logger.Fatal("加载配置失败", zap.Error(err))
+		exitWithError(logger, "加载配置失败", err)
 	}
 
 	db, err := initDB()
 	if err != nil {
-		logger.Fatal("初始化数据库失败", zap.Error(err))
+		exitWithError(logger, "初始化数据库失败", err)
 	}
 
 	openaiClient := openai.NewClient(
@@ -76,9 +83,10 @@ func main() {
 
 	ctx := context.Background()
 	atriCfg := atri.Config{
-		Model:        cfg.OpenAI.Model,
-		MaxRounds:    cfg.Bot.MaxRounds,
-		SystemPrompt: systemPrompt,
+		Model:            cfg.OpenAI.Model,
+		MaxRounds:        cfg.Bot.MaxRounds,
+		SystemPrompt:     systemPrompt,
+		CheckInitTimeout: time.Second * 114514, // 一个十分长的超时时间 防止报错
 	}
 
 	core := atri.New(ctx, logger, &openaiClient, db, cfg.Telegram.BotToken, atriCfg)
@@ -91,24 +99,57 @@ func main() {
 	)
 	ch, err := core.Start()
 	if err != nil {
-		logger.Fatal("启动 Atri 失败", zap.Error(err))
+		exitWithError(logger, "启动 Atri 失败", err)
 	}
 
 	logger.Info("Atri Bot 已启动，按 Ctrl+C 停止")
 
 	<-ch
-
 }
 
-func initLogger() *zap.Logger {
-	config := zap.NewProductionConfig()
-	config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+func initLogger() (*zap.Logger, error) {
+	encoderCfg := zap.NewProductionEncoderConfig()
+	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
 
-	logger, err := config.Build()
+	consoleCore := zapcore.NewCore(
+		zapcore.NewJSONEncoder(encoderCfg),
+		zapcore.AddSync(os.Stdout),
+		zap.DebugLevel,
+	)
+
+	logFile, err := os.OpenFile("atri-bot.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		panic(fmt.Sprintf("初始化 logger 失败: %v", err))
+		return nil, err
 	}
-	return logger
+
+	fileCore := zapcore.NewCore(
+		zapcore.NewJSONEncoder(encoderCfg),
+		zapcore.AddSync(logFile),
+		zap.DebugLevel,
+	)
+
+	core := zapcore.NewTee(consoleCore, fileCore)
+
+	logger := zap.New(core)
+	return logger, nil
+}
+
+func exitWithError(logger *zap.Logger, msg string, err error) {
+	printFriendlyError(logger, err)
+	if runtime.GOOS == "windows" {
+		logger.Error(msg, zap.Error(err))
+		fmt.Println("按回车键退出...")
+		var s string
+		fmt.Scanln(&s)
+		os.Exit(1)
+	}
+	logger.Fatal(msg, zap.Error(err))
+}
+
+func printFriendlyError(logger *zap.Logger, err error) {
+	if errors.Is(err, context.DeadlineExceeded) {
+		logger.Info("连接超时! Tips: 请检查代理配置, 并确认本机可以直接访问 Telegram.")
+	}
 }
 
 func bootstrapConfig(logger *zap.Logger) error {
@@ -119,7 +160,7 @@ func bootstrapConfig(logger *zap.Logger) error {
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			logger.Info("未找到配置文件，正在创建模板", zap.String("file", configFileName))
-			if err := createDefaultConfig(logger); err != nil {
+			if err := createDefaultConfig(); err != nil {
 				return err
 			}
 			logger.Info("配置模板创建完成", zap.String("file", configFileName))
@@ -130,7 +171,7 @@ func bootstrapConfig(logger *zap.Logger) error {
 	return nil
 }
 
-func createDefaultConfig(logger *zap.Logger) error {
+func createDefaultConfig() error {
 	viper.Set("telegram.bot_token", "YOUR_BOT_TOKEN")
 	viper.Set("openai.base_url", "https://api.openai.com/v1")
 	viper.Set("openai.api_key", "YOUR_API_KEY")

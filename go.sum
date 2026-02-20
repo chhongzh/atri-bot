@@ -1,5 +1,5 @@
-github.com/chhongzh/atri-core v1.0.0 h1:DILLKzEs+PcLUs5PspmQhOxt1EPE3y1c+G0vrdqrEMw=
-github.com/chhongzh/atri-core v1.0.0/go.mod h1:eovi5VuTETlXrvhyZwZJxtT7l1yWMlh2L2Y1NbRp1To=
+github.com/chhongzh/atri-core v1.1.0 h1:tn/OS+y9SF1Xh5xXzWq3giTGXotQQEt7p7n/jb17VKo=
+github.com/chhongzh/atri-core v1.1.0/go.mod h1:eovi5VuTETlXrvhyZwZJxtT7l1yWMlh2L2Y1NbRp1To=
 github.com/chhongzh/shlex v1.0.0 h1:+ptOqeWWL8PU2AOT26Jf5EHmrKk+1hvEO2wYZkJGoW4=
 github.com/chhongzh/shlex v1.0.0/go.mod h1:RXuYexAS4zNqGgltsDYBq8GbbaFywX3YLsSPAuzKiQM=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
