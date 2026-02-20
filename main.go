@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/chhongzh/atri-core"
@@ -149,6 +150,10 @@ func exitWithError(logger *zap.Logger, msg string, err error) {
 func printFriendlyError(logger *zap.Logger, err error) {
 	if errors.Is(err, context.DeadlineExceeded) {
 		logger.Info("连接超时! Tips: 请检查代理配置, 并确认本机可以直接访问 Telegram.")
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "unauthorized") {
+		logger.Info("Tips:Bot Token 看起来不正确, 请检查 telegram.bot_token 配置是否填写正确.")
 	}
 }
 
