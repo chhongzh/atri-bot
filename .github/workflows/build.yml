@@ -53,13 +53,43 @@ jobs:
           if [ "${GOOS}" = "windows" ]; then
             BIN_NAME="${BIN_NAME}.exe"
           fi
+          
+
           if [ "${GOOS}" = "android" ]; then
-            # 依赖
-            sudo apt update && sudo apt install -y \
-              build-essential \
-              libc6-dev 
             export CGO_ENABLED=1
+            
+            sudo apt-get update && sudo apt-get install -y wget unzip
+            
+            NDK_VERSION="r26c"
+            NDK_URL="https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
+            echo "Downloading NDK ${NDK_VERSION}..."
+            wget -q $NDK_URL -O ndk.zip
+            unzip -q ndk.zip
+            NDK_HOME=$(pwd)/android-ndk-${NDK_VERSION}
+            TOOLCHAIN_BIN="${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+
+            case "${GOARCH}" in
+              arm)
+                export CC="${TOOLCHAIN_BIN}/armv7a-linux-androideabi21-clang"
+                ;;
+              arm64)
+                export CC="${TOOLCHAIN_BIN}/aarch64-linux-android21-clang"
+                ;;
+              386)
+                export CC="${TOOLCHAIN_BIN}/i686-linux-android21-clang"
+                ;;
+              amd64)
+                export CC="${TOOLCHAIN_BIN}/x86_64-linux-android21-clang"
+                ;;
+              *)
+                echo "Unsupported Android architecture: ${GOARCH}"
+                exit 1
+                ;;
+            esac
+            echo "Using Android CC: ${CC}"
           fi
+
+
           BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           LDFLAGS="-s -w -X main.BuildVersion=${REF_NAME} -X main.BuildCommit=${COMMIT_SHA} -X main.BuildDate=${BUILD_DATE}"
           echo "GOOS=${GOOS} GOARCH=${GOARCH} VERSION=${REF_NAME} COMMIT=${COMMIT_SHA} DATE=${BUILD_DATE}"
