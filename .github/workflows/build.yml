@@ -13,35 +13,21 @@ jobs:
       fail-fast: false
       matrix:
         go-version: ["1.26.x"]
-        include:
-          - goos: android
-            goarch: 386
-          - goos: android
-            goarch: amd64
-          - goos: android
-            goarch: arm
-          - goos: android
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: linux
-            goarch: 386
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm
-          - goos: linux
-            goarch: arm64
-          - goos: windows
-            goarch: 386
-          - goos: windows
-            goarch: amd64
-          - goos: windows
-            goarch: arm
-          - goos: windows
-            goarch: arm64
+        target:
+          - android-386
+          - android-amd64
+          - android-arm
+          - android-arm64
+          - darwin-amd64
+          - darwin-arm64
+          - linux-386
+          - linux-amd64
+          - linux-arm
+          - linux-arm64
+          - windows-386
+          - windows-amd64
+          - windows-arm
+          - windows-arm64
 
     steps:
       - name: Checkout
@@ -55,15 +41,17 @@ jobs:
 
       - name: Build
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
+          TARGET: ${{ matrix.target }}
           COMMIT_SHA: ${{ github.sha }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -e
+          GOOS=${TARGET%%-*}
+          GOARCH=${TARGET#*-}
+          export GOOS GOARCH
           mkdir -p dist
-          BIN_NAME="atri-bot-${{ matrix.goos }}-${{ matrix.goarch }}"
-          if [ "${{ matrix.goos }}" = "windows" ]; then
+          BIN_NAME="atri-bot-${TARGET}"
+          if [ "${GOOS}" = "windows" ]; then
             BIN_NAME="${BIN_NAME}.exe"
           fi
           BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -74,8 +62,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: atri-bot-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/atri-bot-${{ matrix.goos }}-${{ matrix.goarch }}*
+          name: atri-bot-${{ matrix.target }}
+          path: dist/atri-bot-${{ matrix.target }}*
           if-no-files-found: error
 
   release:
