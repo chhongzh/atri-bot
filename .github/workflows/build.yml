@@ -54,7 +54,7 @@ jobs:
             BIN_NAME="${BIN_NAME}.exe"
           fi
           if [ "${GOOS}" = "android" ]; then
-            CGO_ENABLED=1
+            export CGO_ENABLED=1
           fi
           BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           LDFLAGS="-s -w -X main.BuildVersion=${REF_NAME} -X main.BuildCommit=${COMMIT_SHA} -X main.BuildDate=${BUILD_DATE}"
