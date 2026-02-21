@@ -17,9 +17,11 @@ import (
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/spf13/viper"
+	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gorm.io/gorm"
+	"resty.dev/v3"
 )
 
 // Config 结构体用于映射配置文件
@@ -58,6 +60,14 @@ func main() {
 		panic(fmt.Sprintf("初始化日志记录器失败: %v", err))
 	}
 	defer logger.Sync()
+
+	needUpdate, err := shouldUpdate(logger)
+	if err != nil {
+		logger.Warn("版本更新检查失败, 请手动检查.", zap.Error(err))
+	}
+	if needUpdate {
+		logger.Info("有新版本, 建议更新.")
+	}
 
 	if err := bootstrapConfig(logger); err != nil {
 		if errors.Is(err, errConfigTemplateCreated) {
@@ -206,4 +216,22 @@ func initDB() (*gorm.DB, error) {
 	}
 
 	return db, nil
+}
+
+func shouldUpdate(logger *zap.Logger) (bool, error) {
+	r := resty.New()
+	resp, err := r.R().SetTimeout(time.Second * 10).Get("https://api.github.com/repos/chhongzh/atri-bot/releases/latest")
+	if err != nil {
+		return false, err
+	}
+
+	if !resp.IsSuccess() {
+		return false, fmt.Errorf("api error: <%d>%s", resp.StatusCode(), resp.Status())
+	}
+
+	remoteVersion := gjson.GetBytes(resp.Bytes(), "tag_name").String()
+
+	logger.Debug("版本检查", zap.String("Local", BuildVersion), zap.String("Remote", remoteVersion))
+
+	return remoteVersion != BuildVersion, nil
 }

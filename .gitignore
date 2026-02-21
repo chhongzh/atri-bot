@@ -34,4 +34,5 @@ go.work.sum
 atri-bot
 atri-bot.exe
 atri-bot.db
+atri-bot.log
 config.yaml
