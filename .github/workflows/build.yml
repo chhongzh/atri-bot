@@ -54,6 +54,10 @@ jobs:
             BIN_NAME="${BIN_NAME}.exe"
           fi
           if [ "${GOOS}" = "android" ]; then
+            # 依赖
+            sudo apt update && sudo apt install -y \
+              build-essential \
+              libc6-dev 
             export CGO_ENABLED=1
           fi
           BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
