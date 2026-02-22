@@ -114,12 +114,9 @@ func Java_dev_chhongzh_atri_bot_Bridge_Stop(env *C.JNIEnv, clazz C.jclass) {
 //export Java_dev_chhongzh_atri_bot_Bridge_PollLogs
 func Java_dev_chhongzh_atri_bot_Bridge_PollLogs(env *C.JNIEnv, clazz C.jclass) C.jstring {
 	if logCh == nil {
-		return nil
+		return C.JStringFromCString(env, (*C.char)(nil))
 	}
-	s, ok := <-logCh
-	if !ok {
-		return nil
-	}
+	s := <-logCh
 	cs := C.CString(s)
 	defer C.free(unsafe.Pointer(cs))
 	return C.JStringFromCString(env, cs)
