@@ -59,8 +59,6 @@ jobs:
             BIN_NAME="${BIN_NAME}.so"
             export CGO_ENABLED=1
             
-            sudo apt-get update && sudo apt-get install -y wget unzip
-            
             NDK_VERSION="r26c"
             NDK_URL="https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
             echo "Downloading NDK ${NDK_VERSION}..."
@@ -94,7 +92,11 @@ jobs:
           BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           LDFLAGS="-s -w -X main.BuildVersion=${REF_NAME} -X main.BuildCommit=${COMMIT_SHA} -X main.BuildDate=${BUILD_DATE}"
           echo "GOOS=${GOOS} GOARCH=${GOARCH} VERSION=${REF_NAME} COMMIT=${COMMIT_SHA} DATE=${BUILD_DATE}"
-          go build -v -ldflags="$LDFLAGS" -o "dist/${BIN_NAME}" ./...
+          if [ "${GOOS}" = "android" ]; then
+            go build -v -buildmode=c-shared -ldflags="$LDFLAGS" -o "dist/${BIN_NAME}" ./...
+          else
+            go build -v -ldflags="$LDFLAGS" -o "dist/${BIN_NAME}" ./...
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
