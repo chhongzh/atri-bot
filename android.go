@@ -25,6 +25,13 @@ static char* GoStringFromJString(JNIEnv* env, jstring str) {
 	(*env)->ReleaseStringUTFChars(env, str, utf);
 	return ret;
 }
+
+static jstring JStringFromCString(JNIEnv* env, const char* str) {
+	if (str == NULL) {
+		return NULL;
+	}
+	return (*env)->NewStringUTF(env, str);
+}
 */
 import "C"
 
@@ -36,6 +43,40 @@ import (
 
 var androidCtx context.Context
 var androidCancel context.CancelFunc
+
+var logCh chan string
+var logPipeR *os.File
+var logPipeW *os.File
+
+func redirectOutput() {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return
+	}
+	logPipeR = r
+	logPipeW = w
+	os.Stdout = w
+	os.Stderr = w
+	logCh = make(chan string, 128)
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := r.Read(buf)
+			if n > 0 {
+				if logCh != nil {
+					logCh <- string(buf[:n])
+				}
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+}
+
+func init() {
+	redirectOutput()
+}
 
 //export Java_dev_chhongzh_atri_bot_Bridge_Start
 func Java_dev_chhongzh_atri_bot_Bridge_Start(env *C.JNIEnv, clazz C.jclass, workingDir C.jstring) /* isSuccess */ C.jboolean {
@@ -68,4 +109,18 @@ func Java_dev_chhongzh_atri_bot_Bridge_Stop(env *C.JNIEnv, clazz C.jclass) {
 		androidCancel = nil
 		androidCtx = nil
 	}
+}
+
+//export Java_dev_chhongzh_atri_bot_Bridge_PollLogs
+func Java_dev_chhongzh_atri_bot_Bridge_PollLogs(env *C.JNIEnv, clazz C.jclass) C.jstring {
+	if logCh == nil {
+		return nil
+	}
+	s, ok := <-logCh
+	if !ok {
+		return nil
+	}
+	cs := C.CString(s)
+	defer C.free(unsafe.Pointer(cs))
+	return C.JStringFromCString(env, cs)
 }
