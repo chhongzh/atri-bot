@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -55,6 +54,10 @@ var (
 )
 
 func main() {
+	commonMain()
+}
+
+func commonMain() /* isSuccess */ bool {
 	logger, err := initLogger()
 	if err != nil {
 		panic(fmt.Sprintf("初始化日志记录器失败: %v", err))
@@ -72,19 +75,22 @@ func main() {
 	if err := bootstrapConfig(logger); err != nil {
 		if errors.Is(err, errConfigTemplateCreated) {
 			logger.Info("配置模板已生成，请修改后重新运行", zap.String("file", configFileName))
-			return
+			return false
 		}
 		exitWithError(logger, "配置引导失败", err)
+		return false
 	}
 
 	var cfg Config
 	if err := loadConfig(logger, &cfg); err != nil {
 		exitWithError(logger, "加载配置失败", err)
+		return false
 	}
 
 	db, err := initDB()
 	if err != nil {
 		exitWithError(logger, "初始化数据库失败", err)
+		return false
 	}
 
 	openaiClient := openai.NewClient(
@@ -111,11 +117,13 @@ func main() {
 	ch, err := core.Start()
 	if err != nil {
 		exitWithError(logger, "启动 Atri 失败", err)
+		return false
 	}
 
 	logger.Info("Atri Bot 已启动，按 Ctrl+C 停止")
 
 	<-ch
+	return true
 }
 
 func initLogger() (*zap.Logger, error) {
@@ -143,18 +151,6 @@ func initLogger() (*zap.Logger, error) {
 
 	logger := zap.New(core)
 	return logger, nil
-}
-
-func exitWithError(logger *zap.Logger, msg string, err error) {
-	printFriendlyError(logger, err)
-	if runtime.GOOS == "windows" {
-		logger.Error(msg, zap.Error(err))
-		fmt.Println("按回车键退出...")
-		var s string
-		fmt.Scanln(&s)
-		os.Exit(1)
-	}
-	logger.Fatal(msg, zap.Error(err))
 }
 
 func printFriendlyError(logger *zap.Logger, err error) {
