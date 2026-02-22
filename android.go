@@ -29,9 +29,13 @@ static char* GoStringFromJString(JNIEnv* env, jstring str) {
 import "C"
 
 import (
+	"context"
 	"os"
 	"unsafe"
 )
+
+var androidCtx context.Context
+var androidCancel context.CancelFunc
 
 //export Java_dev_chhongzh_atri_bot_Bridge_Start
 func Java_dev_chhongzh_atri_bot_Bridge_Start(env *C.JNIEnv, clazz C.jclass, workingDir C.jstring) /* isSuccess */ C.jboolean {
@@ -45,9 +49,23 @@ func Java_dev_chhongzh_atri_bot_Bridge_Start(env *C.JNIEnv, clazz C.jclass, work
 		_ = os.Chdir(dir)
 	}
 
-	isSuccess := commonMain()
+	if androidCancel != nil {
+		androidCancel()
+	}
+	androidCtx, androidCancel = context.WithCancel(context.Background())
+
+	isSuccess := commonMain(androidCtx)
 	if isSuccess {
 		return C.JNI_TRUE
 	}
 	return C.JNI_FALSE
+}
+
+//export Java_dev_chhongzh_atri_bot_Bridge_Stop
+func Java_dev_chhongzh_atri_bot_Bridge_Stop(env *C.JNIEnv, clazz C.jclass) {
+	if androidCancel != nil {
+		androidCancel()
+		androidCancel = nil
+		androidCtx = nil
+	}
 }

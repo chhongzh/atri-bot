@@ -54,10 +54,12 @@ var (
 )
 
 func main() {
-	commonMain()
+	ctx := context.Background()
+
+	commonMain(ctx)
 }
 
-func commonMain() /* isSuccess */ bool {
+func commonMain(ctx context.Context) /* isSuccess */ bool {
 	logger, err := initLogger()
 	if err != nil {
 		panic(fmt.Sprintf("初始化日志记录器失败: %v", err))
@@ -98,7 +100,6 @@ func commonMain() /* isSuccess */ bool {
 		option.WithAPIKey(cfg.OpenAI.APIKey),
 	)
 
-	ctx := context.Background()
 	atriCfg := atri.Config{
 		Model:            cfg.OpenAI.Model,
 		MaxRounds:        cfg.Bot.MaxRounds,
