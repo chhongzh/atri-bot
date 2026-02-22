@@ -78,8 +78,8 @@ func init() {
 	redirectOutput()
 }
 
-//export Java_dev_chhongzh_atri_bot_Bridge_Start
-func Java_dev_chhongzh_atri_bot_Bridge_Start(env *C.JNIEnv, clazz C.jclass, workingDir C.jstring) /* isSuccess */ C.jboolean {
+//export Java_dev_chhongzh_atri_1bot_Bridge_Start
+func Java_dev_chhongzh_atri_1bot_Bridge_Start(env *C.JNIEnv, clazz C.jclass, workingDir C.jstring) /* isSuccess */ C.jboolean {
 	cDir := C.GoStringFromJString(env, workingDir)
 	dir := "."
 	if cDir != nil {
@@ -102,8 +102,8 @@ func Java_dev_chhongzh_atri_bot_Bridge_Start(env *C.JNIEnv, clazz C.jclass, work
 	return C.JNI_FALSE
 }
 
-//export Java_dev_chhongzh_atri_bot_Bridge_Stop
-func Java_dev_chhongzh_atri_bot_Bridge_Stop(env *C.JNIEnv, clazz C.jclass) {
+//export Java_dev_chhongzh_atri_1bot_Bridge_Stop
+func Java_dev_chhongzh_atri_1bot_Bridge_Stop(env *C.JNIEnv, clazz C.jclass) {
 	if androidCancel != nil {
 		androidCancel()
 		androidCancel = nil
@@ -111,8 +111,8 @@ func Java_dev_chhongzh_atri_bot_Bridge_Stop(env *C.JNIEnv, clazz C.jclass) {
 	}
 }
 
-//export Java_dev_chhongzh_atri_bot_Bridge_PollLogs
-func Java_dev_chhongzh_atri_bot_Bridge_PollLogs(env *C.JNIEnv, clazz C.jclass) C.jstring {
+//export Java_dev_chhongzh_atri_1bot_Bridge_PollLogs
+func Java_dev_chhongzh_atri_1bot_Bridge_PollLogs(env *C.JNIEnv, clazz C.jclass) C.jstring {
 	if logCh == nil {
 		return C.JStringFromCString(env, (*C.char)(nil))
 	}
