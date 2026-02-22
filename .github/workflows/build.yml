@@ -94,6 +94,7 @@ jobs:
           echo "GOOS=${GOOS} GOARCH=${GOARCH} VERSION=${REF_NAME} COMMIT=${COMMIT_SHA} DATE=${BUILD_DATE}"
           if [ "${GOOS}" = "android" ]; then
             go build -v -buildmode=c-shared -ldflags="$LDFLAGS" -o "dist/${BIN_NAME}" ./...
+            rm dist/*.h
           else
             go build -v -ldflags="$LDFLAGS" -o "dist/${BIN_NAME}" ./...
           fi
