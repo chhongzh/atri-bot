@@ -92,12 +92,8 @@ jobs:
           BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           LDFLAGS="-s -w -X main.BuildVersion=${REF_NAME} -X main.BuildCommit=${COMMIT_SHA} -X main.BuildDate=${BUILD_DATE}"
           echo "GOOS=${GOOS} GOARCH=${GOARCH} VERSION=${REF_NAME} COMMIT=${COMMIT_SHA} DATE=${BUILD_DATE}"
-          if [ "${GOOS}" = "android" ]; then
-            go build -v -buildmode=c-shared -ldflags="$LDFLAGS" -o "dist/${BIN_NAME}" ./...
-            rm dist/*.h
-          else
-            go build -v -ldflags="$LDFLAGS" -o "dist/${BIN_NAME}" ./...
-          fi
+          
+          go build -v -ldflags="$LDFLAGS" -o "dist/${BIN_NAME}" .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -117,22 +113,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate release notes
-        id: notes
-        run: |
-          set -e
-          COMMITS=$(git log --format=%s)
-          FILTERED=$(printf '%s\n' "$COMMITS" | grep -E '^(feat|fix|chore):' || true)
-          if [ -z "$FILTERED" ]; then
-            BODY="No feat/fix/chore commits"
-          else
-            BODY=$(printf '%s\n' "$FILTERED")
-          fi
-          {
-            printf 'release_body<<EOF\n'
-            printf '%s\n' "$BODY"
-            printf 'EOF\n'
-          } >> "$GITHUB_OUTPUT"
+
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -144,7 +125,6 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          body: ${{ steps.notes.outputs.release_body }}
           files: dist/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
