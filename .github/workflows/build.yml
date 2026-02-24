@@ -56,7 +56,6 @@ jobs:
           
 
           if [ "${GOOS}" = "android" ]; then
-            BIN_NAME="${BIN_NAME}.so"
             export CGO_ENABLED=1
             
             NDK_VERSION="r26c"
