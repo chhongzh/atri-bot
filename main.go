@@ -216,6 +216,8 @@ func initDB() (*gorm.DB, error) {
 }
 
 func shouldUpdate(logger *zap.Logger) (bool, error) {
+	logger.Info("从github读取版本信息...")
+
 	r := resty.New()
 	resp, err := r.R().SetTimeout(time.Second * 10).Get("https://api.github.com/repos/chhongzh/atri-bot/releases/latest")
 	if err != nil {
@@ -230,5 +232,5 @@ func shouldUpdate(logger *zap.Logger) (bool, error) {
 
 	logger.Debug("版本检查", zap.String("Local", BuildVersion), zap.String("Remote", remoteVersion))
 
-	return remoteVersion != BuildVersion, nil
+	return remoteVersion != BuildVersion && BuildVersion != "dev", nil
 }
