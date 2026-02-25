@@ -6,7 +6,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var errBuf chan error
+var errBuf = make(chan error, 64)
 
 func exitWithError(logger *zap.Logger, msg string, err error) {
 	logger.Error(msg, zap.Error(err))
