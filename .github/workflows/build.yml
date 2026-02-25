@@ -92,6 +92,11 @@ jobs:
           LDFLAGS="-s -w -X main.BuildVersion=${REF_NAME} -X main.BuildCommit=${COMMIT_SHA} -X main.BuildDate=${BUILD_DATE}"
           echo "GOOS=${GOOS} GOARCH=${GOARCH} VERSION=${REF_NAME} COMMIT=${COMMIT_SHA} DATE=${BUILD_DATE}"
           
+          if [ "${GOOS}" = "android" ]; then
+            go build -v -ldflags="$LDFLAGS" -o "dist/${BIN_NAME}.so" -buildmode=c-shared .
+            rm dist/*.h
+          fi
+
           go build -v -ldflags="$LDFLAGS" -o "dist/${BIN_NAME}" .
 
       - name: Upload artifact
