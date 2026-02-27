@@ -37,6 +37,7 @@ import "C"
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"unsafe"
 )
@@ -47,13 +48,24 @@ var androidCancel context.CancelFunc
 //export Java_dev_chhongzh_atri_1bot_1launcher_Bridge_Start
 func Java_dev_chhongzh_atri_1bot_1launcher_Bridge_Start(env *C.JNIEnv, clazz C.jclass, workingDir C.jstring) /* isSuccess */ C.jboolean {
 	cDir := C.GoStringFromJString(env, workingDir)
-	dir := "."
-	if cDir != nil {
-		defer C.free(unsafe.Pointer(cDir))
-		dir = C.GoString(cDir)
+	if cDir == nil {
+		// 报错1
+		errBuf <- fmt.Errorf("Java层传递到C层的dir是空的")
+		return C.JNI_FALSE
 	}
-	if dir != "" {
-		_ = os.Chdir(dir)
+	defer C.free(unsafe.Pointer(cDir))
+	dir = C.GoString(cDir)
+	if dir == "" {
+		// 报错2
+		errBuf <- fmt.Errorf("dir 是空的")
+		return C.JNI_FALSE
+
+	}
+	err := os.Chdir(dir)
+	if err != nil {
+		// 报错2
+		errBuf <- fmt.Errorf("chdir错误: %w", err)
+		return C.JNI_FALSE
 	}
 
 	if androidCancel != nil {
