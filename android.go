@@ -54,7 +54,7 @@ func Java_dev_chhongzh_atri_1bot_1launcher_Bridge_Start(env *C.JNIEnv, clazz C.j
 		return C.JNI_FALSE
 	}
 	defer C.free(unsafe.Pointer(cDir))
-	dir = C.GoString(cDir)
+	dir := C.GoString(cDir)
 	if dir == "" {
 		// 报错2
 		errBuf <- fmt.Errorf("dir 是空的")
