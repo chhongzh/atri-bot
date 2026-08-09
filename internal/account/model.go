@@ -22,6 +22,9 @@ type User struct {
 	AIModel     string
 	AIMaxRounds int `gorm:"not null;default:36"`
 
+	MCPMaxTools      int `gorm:"not null;default:0"`
+	MCPBlockInternal *bool
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

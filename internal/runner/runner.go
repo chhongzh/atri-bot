@@ -8,6 +8,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/character"
 	"github.com/chhongzh/atri-bot/internal/chat"
 	"github.com/chhongzh/atri-bot/internal/command"
+	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	"github.com/chhongzh/atri-bot/internal/session"
 	"github.com/chhongzh/atri-bot/internal/tools"
 	"go.uber.org/zap"
@@ -33,6 +34,10 @@ type Config struct {
 
 	AIModelTimeout time.Duration
 
+	MCPWorkers         int
+	MCPDefaultMaxTools int
+	MCPBlockInternal   bool
+
 	ToolRegistrars []tools.Registrar
 }
 
@@ -48,6 +53,7 @@ type Runner struct {
 	commands   *command.Manager
 	sessions   *session.Manager
 	tools      *tools.Manager
+	mcp        *mcpmanager.Manager
 
 	systemResultMu      sync.Mutex
 	systemResultDeletes map[int64]func()
@@ -71,6 +77,9 @@ func (r *Runner) Stop() {
 	r.deleteAllSystemResults()
 	if r.chats != nil {
 		r.chats.Shutdown()
+	}
+	if r.mcp != nil {
+		r.mcp.Close()
 	}
 	if r.bot != nil {
 		r.bot.Stop()
@@ -107,4 +116,8 @@ func (r *Runner) SessionManager() *session.Manager {
 
 func (r *Runner) ToolManager() *tools.Manager {
 	return r.tools
+}
+
+func (r *Runner) MCPManager() *mcpmanager.Manager {
+	return r.mcp
 }

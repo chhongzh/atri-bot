@@ -30,7 +30,7 @@ func (r *Runner) handlerForText(c telebot.Context) error {
 
 	err := r.chats.Chat(ctx, c, text)
 	if errors.Is(err, chat.ErrAIConfigIncomplete) {
-		return c.Send("请先配置你自己的 AI 连接")
+		return c.Send("缺少 AI 配置，请先使用/ai配置你自己的 AI 连接")
 	}
 	return err
 }

@@ -47,19 +47,24 @@ type Manager struct {
 	db     *gorm.DB
 	logger *zap.Logger
 
-	mu           sync.RWMutex
-	registered   map[string]*registeredTool
-	order        []string
-	builtins     map[string]tool.BaseTool
-	builtinOrder []string
+	mu                 sync.RWMutex
+	registered         map[string]*registeredTool
+	order              []string
+	builtins           map[string]tool.BaseTool
+	builtinOrder       []string
+	permissionByTool   map[string]string
+	virtualPermissions map[string]struct{}
+	permissionOrder    []string
 }
 
 func New(db *gorm.DB, logger *zap.Logger) *Manager {
 	return &Manager{
-		db:         db,
-		logger:     logger,
-		registered: make(map[string]*registeredTool),
-		builtins:   make(map[string]tool.BaseTool),
+		db:                 db,
+		logger:             logger,
+		registered:         make(map[string]*registeredTool),
+		builtins:           make(map[string]tool.BaseTool),
+		permissionByTool:   make(map[string]string),
+		virtualPermissions: make(map[string]struct{}),
 	}
 }
 
@@ -125,16 +130,36 @@ func Register[C, I, O any](
 	if _, exists := manager.builtins[name]; exists {
 		return fmt.Errorf("tool %q already registered as builtin", name)
 	}
+	if _, exists := manager.virtualPermissions[name]; exists {
+		return fmt.Errorf("tool %q conflicts with a permission-only capability", name)
+	}
 	manager.registered[name] = &registeredTool{
 		tool:          inferred,
 		configType:    configType,
 		defaultConfig: defaultJSON,
 	}
 	manager.order = append(manager.order, name)
+	manager.permissionByTool[name] = name
+	manager.permissionOrder = append(manager.permissionOrder, name)
 	return nil
 }
 
 func (m *Manager) RegisterBuiltin(name string, builtin tool.BaseTool) error {
+	return m.registerBuiltin(name, name, builtin)
+}
+
+// RegisterBuiltinWithPermission registers a callable builtin under a shared
+// permission. This is used for capabilities such as MCP where one permission
+// must hide every related management tool as a group.
+func (m *Manager) RegisterBuiltinWithPermission(name, permission string, builtin tool.BaseTool) error {
+	permission = strings.TrimSpace(permission)
+	if permission == "" {
+		return errors.New("builtin tool permission is required")
+	}
+	return m.registerBuiltin(name, permission, builtin)
+}
+
+func (m *Manager) registerBuiltin(name, permission string, builtin tool.BaseTool) error {
 	name = strings.TrimSpace(name)
 	if name == "" || builtin == nil {
 		return fmt.Errorf("invalid builtin tool %q", name)
@@ -158,8 +183,43 @@ func (m *Manager) RegisterBuiltin(name string, builtin tool.BaseTool) error {
 	if _, exists := m.builtins[name]; exists {
 		return fmt.Errorf("builtin tool %q already registered", name)
 	}
+	if permission == name {
+		if _, exists := m.virtualPermissions[name]; exists {
+			return fmt.Errorf("builtin tool %q conflicts with a permission-only capability", name)
+		}
+	}
+	if permission != name {
+		if _, exists := m.virtualPermissions[permission]; !exists {
+			return fmt.Errorf("tool permission %q is not registered", permission)
+		}
+	}
 	m.builtins[name] = builtin
 	m.builtinOrder = append(m.builtinOrder, name)
+	m.permissionByTool[name] = permission
+	if permission == name {
+		m.permissionOrder = append(m.permissionOrder, name)
+	}
+	return nil
+}
+
+// RegisterPermission registers a permission-only capability. It appears in
+// administrative permission controls but is never exposed to the model as a
+// callable tool.
+func (m *Manager) RegisterPermission(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("tool permission name is required")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.virtualPermissions[name]; exists {
+		return fmt.Errorf("tool permission %q already registered", name)
+	}
+	if _, exists := m.permissionByTool[name]; exists {
+		return fmt.Errorf("tool permission %q conflicts with a tool", name)
+	}
+	m.virtualPermissions[name] = struct{}{}
+	m.permissionOrder = append(m.permissionOrder, name)
 	return nil
 }
 
@@ -191,6 +251,35 @@ func (m *Manager) AllNames() []string {
 	names = append(names, m.order...)
 	names = append(names, m.builtinOrder...)
 	return names
+}
+
+// PermissionNames returns the independently controllable permission names.
+// Tools sharing a permission are intentionally omitted as separate controls.
+func (m *Manager) PermissionNames() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return append([]string(nil), m.permissionOrder...)
+}
+
+// PermissionName returns the permission that controls a callable tool.
+func (m *Manager) PermissionName(toolName string) (string, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	permission, ok := m.permissionByTool[strings.TrimSpace(toolName)]
+	return permission, ok
+}
+
+// HasPermission reports whether name is an independently controllable tool
+// permission, including permission-only capabilities.
+func (m *Manager) HasPermission(name string) bool {
+	name = strings.TrimSpace(name)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if _, ok := m.virtualPermissions[name]; ok {
+		return true
+	}
+	permission, ok := m.permissionByTool[name]
+	return ok && permission == name
 }
 
 // Has reports whether a tool with the given name is registered.

@@ -81,6 +81,43 @@ func TestGetConfigRejectsInvalidDefaultToolPermission(t *testing.T) {
 	}
 }
 
+func TestGetConfigMCPDefaults(t *testing.T) {
+	withWorkingDirectory(t, "telegram:\n  bot_token: test-token\n")
+	cfg, err := getConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.mcpWorkers != 32 || cfg.mcpDefaultMaxTools != 32 || !cfg.mcpBlockInternal {
+		t.Fatalf("mcp defaults = workers:%d max:%d block:%v", cfg.mcpWorkers, cfg.mcpDefaultMaxTools, cfg.mcpBlockInternal)
+	}
+}
+
+func TestGetConfigMCPOverrides(t *testing.T) {
+	withWorkingDirectory(t, "telegram:\n  bot_token: test-token\nmcp:\n  workers: 4\n  max_tools: 7\n  block_internal: false\n")
+	cfg, err := getConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.mcpWorkers != 4 || cfg.mcpDefaultMaxTools != 7 || cfg.mcpBlockInternal {
+		t.Fatalf("mcp overrides = workers:%d max:%d block:%v", cfg.mcpWorkers, cfg.mcpDefaultMaxTools, cfg.mcpBlockInternal)
+	}
+}
+
+func TestGetConfigRejectsInvalidMCPPoolSettings(t *testing.T) {
+	tests := map[string]string{
+		"workers":   "telegram:\n  bot_token: test-token\nmcp:\n  workers: 0\n",
+		"max tools": "telegram:\n  bot_token: test-token\nmcp:\n  max_tools: 0\n",
+	}
+	for name, config := range tests {
+		t.Run(name, func(t *testing.T) {
+			withWorkingDirectory(t, config)
+			if _, err := getConfig(); err == nil {
+				t.Fatal("getConfig accepted invalid MCP settings")
+			}
+		})
+	}
+}
+
 func withWorkingDirectory(t *testing.T, config string) {
 	t.Helper()
 	dir := t.TempDir()

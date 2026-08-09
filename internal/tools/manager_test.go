@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/cloudwego/eino/components/tool"
+	toolutils "github.com/cloudwego/eino/components/tool/utils"
 	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -90,6 +91,32 @@ func TestSetConfigRejectsUnknownFields(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("invalid config was persisted, record count = %d", count)
+	}
+}
+
+func TestSharedPermissionDoesNotExposeVirtualTool(t *testing.T) {
+	manager := New(nil, zap.NewNop())
+	if err := manager.RegisterPermission("mcp"); err != nil {
+		t.Fatal(err)
+	}
+	builtin, err := toolutils.InferTool("manage_mcp", "manage mcp", func(context.Context, *struct{}) (*struct{}, error) {
+		return &struct{}{}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = manager.RegisterBuiltinWithPermission("manage_mcp", "mcp", builtin); err != nil {
+		t.Fatal(err)
+	}
+	if manager.Has("mcp") {
+		t.Fatal("permission-only mcp capability is callable")
+	}
+	if !manager.HasPermission("mcp") || manager.HasPermission("manage_mcp") {
+		t.Fatalf("permission names = %v, want only mcp", manager.PermissionNames())
+	}
+	permission, ok := manager.PermissionName("manage_mcp")
+	if !ok || permission != "mcp" {
+		t.Fatalf("PermissionName(manage_mcp) = %q, %v", permission, ok)
 	}
 }
 

@@ -65,7 +65,7 @@ func (r *Runner) commandToolPerm(c telebot.Context, args []string) {
 }
 
 func (r *Runner) showToolPermissions(c telebot.Context, ctx context.Context, targetID int64) {
-	names := r.tools.AllNames()
+	names := r.tools.PermissionNames()
 	sort.Strings(names)
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("用户 %d 的工具权限：\n", targetID))

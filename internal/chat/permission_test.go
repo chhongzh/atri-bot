@@ -5,8 +5,11 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/chhongzh/atri-bot/internal/account"
+	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/schema"
 	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -15,6 +18,14 @@ import (
 type emptyConfig struct{}
 type emptyInput struct{}
 type emptyOutput struct{}
+
+type namedBuiltinTool struct {
+	name string
+}
+
+func (t *namedBuiltinTool) Info(context.Context) (*schema.ToolInfo, error) {
+	return &schema.ToolInfo{Name: t.name, Desc: "test builtin"}, nil
+}
 
 func newTestChatManager(t *testing.T, db *gorm.DB, defaults map[string]bool) *Manager {
 	t.Helper()
@@ -31,7 +42,15 @@ func newTestChatManager(t *testing.T, db *gorm.DB, defaults map[string]bool) *Ma
 	if err := toolManager.Init(); err != nil {
 		t.Fatal(err)
 	}
-	manager := New(context.Background(), zap.NewNop(), db, nil, nil, nil, toolManager, Config{
+	accounts := account.New(db, zap.NewNop(), 36)
+	if err := accounts.Init(); err != nil {
+		t.Fatal(err)
+	}
+	mcpManager := mcpmanager.New(context.Background(), zap.NewNop(), db, accounts, mcpmanager.Config{})
+	if err := mcpManager.Init(); err != nil {
+		t.Fatal(err)
+	}
+	manager := New(context.Background(), zap.NewNop(), db, accounts, nil, nil, toolManager, mcpManager, Config{
 		DefaultToolPermissions: defaults,
 	})
 	if err := manager.Init(); err != nil {
@@ -150,6 +169,37 @@ func TestAllowedToolsFiltersByPermission(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertToolNames(t, tools, "tool_a", "tool_c")
+}
+
+func TestAllowedToolsAppliesSharedMCPPermission(t *testing.T) {
+	manager := newTestChatManager(t, openTestDB(t), nil)
+	if err := manager.tools.RegisterPermission("mcp"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"list_mcp_providers", "configure_mcp_provider"} {
+		if err := manager.tools.RegisterBuiltinWithPermission(name, "mcp", &namedBuiltinTool{name: name}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := manager.SetToolPermission(context.Background(), 1, "mcp", false); err != nil {
+		t.Fatal(err)
+	}
+	tools, err := manager.allowedTools(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertToolNames(t, tools, "tool_a", "tool_b", "tool_c")
+	if err = manager.SetToolPermission(context.Background(), 1, "list_mcp_providers", true); !errors.Is(err, toolmanager.ErrToolNotFound) {
+		t.Fatalf("group member permission error = %v, want ErrToolNotFound", err)
+	}
+	if err = manager.SetToolPermission(context.Background(), 1, "mcp", true); err != nil {
+		t.Fatal(err)
+	}
+	tools, err = manager.allowedTools(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertToolNames(t, tools, "tool_a", "tool_b", "tool_c", "list_mcp_providers", "configure_mcp_provider")
 }
 
 func assertToolNames(t *testing.T, tools []tool.BaseTool, want ...string) {

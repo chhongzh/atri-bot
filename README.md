@@ -31,12 +31,19 @@ bot:
 - `bot.max_rounds`：新用户的默认会话轮数；用户可单独修改。
 - `tools.default_permissions`：工具的默认用户权限，`工具名: true/false`。
   未在配置中出现且没有单独设置的工具默认对所有用户可用。
+- `mcp.workers`：MCP provider 异步加载 worker 数，默认 `32`。
+- `mcp.max_tools`：每个用户可添加的 MCP provider 上限，默认 `32`。
+- `mcp.block_internal`：是否拦截 localhost、内网域名和私网 IP，默认 `true`。
 
 ```yaml
 tools:
   default_permissions:
     send_email: true
     get_person_info: false
+mcp:
+  workers: 32
+  max_tools: 32
+  block_internal: true
 ```
 
 第一个与机器人交互的用户会自动成为管理员。命令使用 shell 风格参数解析，
@@ -68,3 +75,20 @@ Agent 工具节点中（模型完全看不到），而不是在调用时拦截�
 
 `reset` 删除该用户的单独记录，恢复为默认权限。工具调用失败不会中断整轮对话，
 错误会作为 `[tool error] ...` 结果返回给模型，让模型可以自行修正或重试。
+
+MCP 使用特殊权限名 `mcp` 作为一刀切总开关。禁止后，用户的远程 MCP 工具和
+自然语言 MCP 管理工具都会从 Agent 工具节点中消失，不能读取或修改 provider：
+
+```text
+/toolperm deny <user-id> mcp
+/toolperm reset <user-id> mcp
+```
+
+管理员还可以覆盖单个用户的 provider 上限和内网地址检查；`0` 或 `default`
+恢复全局默认值：
+
+```text
+/mcp show <user-id>
+/mcp limit <user-id> <positive-integer|0>
+/mcp internal <user-id> <on|off|default>
+```

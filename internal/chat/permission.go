@@ -20,8 +20,8 @@ func normalizeDefaultToolPermissions(
 	defaults map[string]bool,
 ) map[string]bool {
 	normalized := make(map[string]bool, len(defaults))
-	known := make(map[string]bool, len(tools.AllNames()))
-	for _, name := range tools.AllNames() {
+	known := make(map[string]bool, len(tools.PermissionNames()))
+	for _, name := range tools.PermissionNames() {
 		known[name] = true
 	}
 	unknown := make([]string, 0)
@@ -74,7 +74,7 @@ func (m *Manager) SetToolPermission(ctx context.Context, userID int64, toolName 
 	if toolName == "" {
 		return errors.New("tool name is required")
 	}
-	if !m.tools.Has(toolName) {
+	if !m.tools.HasPermission(toolName) {
 		return fmt.Errorf("%w: %s", toolmanager.ErrToolNotFound, toolName)
 	}
 	record := ToolPermission{UserID: userID, ToolName: toolName, Allowed: allowed}
@@ -95,7 +95,7 @@ func (m *Manager) ResetToolPermission(ctx context.Context, userID int64, toolNam
 	if toolName == "" {
 		return errors.New("tool name is required")
 	}
-	if !m.tools.Has(toolName) {
+	if !m.tools.HasPermission(toolName) {
 		return fmt.Errorf("%w: %s", toolmanager.ErrToolNotFound, toolName)
 	}
 	if err := m.db.WithContext(ctx).
@@ -172,7 +172,11 @@ func (m *Manager) allowedTools(ctx context.Context, userID int64) ([]tool.BaseTo
 		if info != nil {
 			name = info.Name
 		}
-		ok, err := m.ToolAllowed(ctx, userID, name)
+		permission, exists := m.tools.PermissionName(name)
+		if !exists {
+			return nil, fmt.Errorf("tool %q has no permission mapping", name)
+		}
+		ok, err := m.ToolAllowed(ctx, userID, permission)
 		if err != nil {
 			return nil, err
 		}

@@ -106,6 +106,61 @@ func TestAIConfigIsStoredPerUser(t *testing.T) {
 	}
 }
 
+func TestMCPOverridesRequireAdminAndStayPerUser(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := New(db, zap.NewNop(), 24)
+	if err = manager.Init(); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, _, err = manager.EnsureUser(ctx, 1, "admin", "Admin"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = manager.EnsureUser(ctx, 2, "user", "User"); err != nil {
+		t.Fatal(err)
+	}
+	if err = manager.SetMCPMaxTools(ctx, 2, 2, 8); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("non-admin SetMCPMaxTools error = %v", err)
+	}
+	if err = manager.SetMCPMaxTools(ctx, 1, 2, 8); err != nil {
+		t.Fatal(err)
+	}
+	blockInternal := false
+	if err = manager.SetMCPBlockInternal(ctx, 1, 2, &blockInternal); err != nil {
+		t.Fatal(err)
+	}
+	admin, err := manager.Get(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := manager.Get(ctx, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if admin.MCPMaxTools != 0 || admin.MCPBlockInternal != nil {
+		t.Fatalf("admin MCP settings changed: max:%d block:%v", admin.MCPMaxTools, admin.MCPBlockInternal)
+	}
+	if user.MCPMaxTools != 8 || user.MCPBlockInternal == nil || *user.MCPBlockInternal {
+		t.Fatalf("user MCP settings = max:%d block:%v", user.MCPMaxTools, user.MCPBlockInternal)
+	}
+	if err = manager.SetMCPMaxTools(ctx, 1, 2, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err = manager.SetMCPBlockInternal(ctx, 1, 2, nil); err != nil {
+		t.Fatal(err)
+	}
+	user, err = manager.Get(ctx, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.MCPMaxTools != 0 || user.MCPBlockInternal != nil {
+		t.Fatalf("reset MCP settings = max:%d block:%v", user.MCPMaxTools, user.MCPBlockInternal)
+	}
+}
+
 func TestVerboseIsStoredPerUserAndDefaultsOff(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"))
 	if err != nil {

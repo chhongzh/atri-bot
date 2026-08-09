@@ -11,12 +11,15 @@ import (
 
 	"github.com/chhongzh/atri-bot/internal/account"
 	"github.com/chhongzh/atri-bot/internal/character"
+	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	"github.com/chhongzh/atri-bot/internal/msgops"
 	"github.com/chhongzh/atri-bot/internal/session"
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	openai "github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/adk"
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
@@ -34,6 +37,7 @@ type Config struct {
 	StateTTL               time.Duration
 	ModelTimeout           time.Duration
 	DefaultToolPermissions map[string]bool
+	SendSystemResult       func(telebot.Context, string) error
 }
 
 type Manager struct {
@@ -43,6 +47,7 @@ type Manager struct {
 	characters *character.Manager
 	sessions   *session.Manager
 	tools      *toolmanager.Manager
+	mcp        *mcpmanager.Manager
 	cfg        Config
 
 	defaultToolPermissions map[string]bool
@@ -62,6 +67,7 @@ func New(
 	characters *character.Manager,
 	sessions *session.Manager,
 	tools *toolmanager.Manager,
+	mcpManager *mcpmanager.Manager,
 	cfg Config,
 ) *Manager {
 	if cfg.StateTTL <= 0 {
@@ -71,18 +77,34 @@ func New(
 		cfg.ModelTimeout = 2 * time.Minute
 	}
 	managerCtx, cancel := context.WithCancel(ctx)
-	return &Manager{
+	manager := &Manager{
 		logger:                 logger,
 		db:                     db,
 		accounts:               accounts,
 		characters:             characters,
 		sessions:               sessions,
 		tools:                  tools,
+		mcp:                    mcpManager,
 		cfg:                    cfg,
 		defaultToolPermissions: normalizeDefaultToolPermissions(logger, tools, cfg.DefaultToolPermissions),
 		ctx:                    managerCtx,
 		cancel:                 cancel,
 		states:                 make(map[int64]*UserState),
+	}
+	if mcpManager != nil {
+		mcpManager.SetOnChange(manager.markStateStale)
+	}
+	return manager
+}
+
+// markStateStale lets the current tool call finish. The state is invalidated
+// before the user's next message, when the new provider set can be loaded.
+func (m *Manager) markStateStale(userID int64) {
+	m.mu.Lock()
+	state := m.states[userID]
+	m.mu.Unlock()
+	if state != nil {
+		state.markStale()
 	}
 }
 
@@ -129,6 +151,7 @@ func (m *Manager) Invalidate(userID int64) {
 			adk.WithStopCause("state invalidated"),
 		)
 		state.TurnLoop.Wait()
+		state.closeMCP()
 		m.mu.Lock()
 		if m.states[userID] == state {
 			delete(m.states, userID)
@@ -153,6 +176,7 @@ func (m *Manager) InvalidateAll() {
 	}
 	for _, state := range states {
 		state.TurnLoop.Wait()
+		state.closeMCP()
 	}
 	m.mu.Lock()
 	for _, state := range states {
@@ -177,6 +201,9 @@ func (m *Manager) Shutdown() {
 	for _, state := range states {
 		state.TurnLoop.Wait()
 	}
+	for _, state := range states {
+		state.closeMCP()
+	}
 	m.mu.Lock()
 	m.states = make(map[int64]*UserState)
 	m.mu.Unlock()
@@ -185,11 +212,16 @@ func (m *Manager) Shutdown() {
 func (m *Manager) state(ctx context.Context, userID int64, c telebot.Context) (*UserState, error) {
 	m.mu.Lock()
 	if state := m.states[userID]; state != nil {
-		state.TelebotContext = c
+		if !state.isStale() {
+			state.TelebotContext = c
+			m.mu.Unlock()
+			return state, nil
+		}
 		m.mu.Unlock()
-		return state, nil
+		m.Invalidate(userID)
+	} else {
+		m.mu.Unlock()
 	}
-	m.mu.Unlock()
 
 	state, err := m.newState(ctx, userID, c)
 	if err != nil {
@@ -200,6 +232,7 @@ func (m *Manager) state(ctx context.Context, userID int64, c telebot.Context) (*
 	if existing := m.states[userID]; existing != nil {
 		m.mu.Unlock()
 		state.TurnLoop.Stop(adk.WithImmediate(), adk.WithSkipCheckpoint())
+		state.closeMCP()
 		return existing, nil
 	}
 	m.states[userID] = state
@@ -212,14 +245,20 @@ func (m *Manager) state(ctx context.Context, userID int64, c telebot.Context) (*
 		adk.WithStopCause("state expired"),
 	)
 	go m.watchState(state)
-	m.logger.Info("created user chat state",
-		zap.Int64("user_id", userID),
-		zap.String("character_id", state.CharacterID),
-	)
 	return state, nil
 }
 
 func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context) (*UserState, error) {
+	startedAt := time.Now()
+	if m.cfg.SendSystemResult != nil {
+		if err := m.cfg.SendSystemResult(c, "正在加载聊天状态，请稍候。"); err != nil {
+			m.logger.Warn("failed to send chat state loading message",
+				zap.Int64("user_id", userID),
+				zap.Error(err),
+			)
+		}
+	}
+
 	user, err := m.accounts.Get(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -251,7 +290,7 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("%w: missing %s; use /ai to configure", ErrAIConfigIncomplete, strings.Join(missing, ", "))
 	}
-	model, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
+	chatModel, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
 		BaseURL: strings.TrimSpace(user.AIBaseURL),
 		APIKey:  strings.TrimSpace(user.AIAPIKey),
 		Model:   strings.TrimSpace(user.AIModel),
@@ -260,17 +299,7 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 	if err != nil {
 		return nil, err
 	}
-	tools, err := m.allowedTools(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
-		Name:        fmt.Sprintf("atri_%d", userID),
-		Description: "A Telegram character chat agent",
-		Model:       model,
-		ToolsConfig: adk.ToolsConfig{ToolsNodeConfig: toolNodeConfig(tools)},
-		Handlers:    []adk.ChatModelAgentMiddleware{&safeToolMiddleware{}},
-	})
+	agent, err := m.buildAgent(ctx, chatModel, userID, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -282,19 +311,99 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 		Agent:          agent,
 		Runner:         runner,
 		TelebotContext: c,
+		model:          chatModel,
 	}
 	state.TurnLoop = adk.NewTurnLoop(adk.TurnLoopConfig[*Request, *schema.Message]{
 		GenInput: func(turnCtx context.Context, _ *adk.TurnLoop[*Request, *schema.Message], items []*Request) (*adk.GenInputResult[*Request, *schema.Message], error) {
 			return m.genInput(turnCtx, state, items)
 		},
 		PrepareAgent: func(context.Context, *adk.TurnLoop[*Request, *schema.Message], []*Request) (adk.Agent, error) {
-			return state.Agent, nil
+			return state.agent(), nil
 		},
 		OnAgentEvents: func(turnCtx context.Context, turn *adk.TurnContext[*Request, *schema.Message], events *adk.AsyncIterator[*adk.AgentEvent]) error {
 			return m.onAgentEvents(turnCtx, state, turn, events)
 		},
 	})
+	if m.mcp != nil {
+		cancelLoad, loadErr := m.mcp.LoadAsync(userID, func(ctx context.Context) (bool, error) {
+			return m.ToolAllowed(ctx, userID, "mcp")
+		}, func(result *mcpmanager.LoadResult, loadErr error) {
+			m.attachMCPTools(state, result, loadErr)
+		})
+		if loadErr != nil {
+			m.logger.Warn("failed to enqueue mcp loading",
+				zap.Int64("user_id", userID),
+				zap.Error(loadErr),
+			)
+		} else {
+			state.setMCPLoadCancel(cancelLoad)
+		}
+	}
+	m.logger.Info("created user chat state",
+		zap.Int64("user_id", userID),
+		zap.String("character_id", characterID),
+		zap.Duration("elapsed", time.Since(startedAt)),
+	)
 	return state, nil
+}
+
+func (m *Manager) buildAgent(
+	ctx context.Context,
+	model model.ChatModel,
+	userID int64,
+	mcpTools []tool.BaseTool,
+) (*adk.ChatModelAgent, error) {
+	static, err := m.allowedTools(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	all := make([]tool.BaseTool, 0, len(static)+len(mcpTools))
+	all = append(all, static...)
+	all = append(all, mcpTools...)
+	return adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
+		Name:        fmt.Sprintf("atri_%d", userID),
+		Description: "A Telegram character chat agent",
+		Model:       model,
+		ToolsConfig: adk.ToolsConfig{ToolsNodeConfig: toolNodeConfig(all)},
+		Handlers:    []adk.ChatModelAgentMiddleware{&safeToolMiddleware{}},
+	})
+}
+
+func (m *Manager) attachMCPTools(state *UserState, result *mcpmanager.LoadResult, loadErr error) {
+	if loadErr != nil {
+		if errors.Is(loadErr, context.Canceled) {
+			return
+		}
+		m.logger.Warn("mcp loading failed",
+			zap.Int64("user_id", state.UserID),
+			zap.Error(loadErr),
+		)
+		return
+	}
+	if result == nil {
+		return
+	}
+	if len(result.Tools) == 0 {
+		result.Close()
+		return
+	}
+	agent, err := m.buildAgent(context.Background(), state.model, state.UserID, result.Tools)
+	if err != nil {
+		result.Close()
+		m.logger.Warn("failed to rebuild agent with mcp tools",
+			zap.Int64("user_id", state.UserID),
+			zap.Error(err),
+		)
+		return
+	}
+	if !state.attachMCP(agent, result.Tools, result.Close) {
+		result.Close()
+		return
+	}
+	m.logger.Info("attached mcp tools to chat state",
+		zap.Int64("user_id", state.UserID),
+		zap.Int("mcp_tools", len(result.Tools)),
+	)
 }
 
 func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Request) (*adk.GenInputResult[*Request, *schema.Message], error) {
@@ -516,6 +625,7 @@ func (m *Manager) watchState(state *UserState) {
 		delete(m.states, state.UserID)
 	}
 	m.mu.Unlock()
+	state.closeMCP()
 }
 
 func completeRequests(requests []*Request, err error) {

@@ -10,12 +10,14 @@ import (
 	"github.com/chhongzh/atri-bot/internal/session"
 	"github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/chhongzh/atri-bot/internal/tools/email"
+	"github.com/chhongzh/atri-bot/internal/tools/hotspot"
 	"github.com/glebarez/sqlite"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"resty.dev/v3"
 )
 
 func main() {
@@ -23,6 +25,7 @@ func main() {
 		fx.Provide(getConfig),
 		fx.Provide(getLogger),
 		fx.Provide(getDB),
+		fx.Provide(getRestyClient),
 		fx.Provide(getRunner),
 
 		fx.WithLogger(func(log *zap.Logger) fxevent.Logger {
@@ -42,6 +45,9 @@ type config struct {
 	cwd                    string
 	defaultMaxRounds       int
 	defaultToolPermissions map[string]bool
+	mcpWorkers             int
+	mcpDefaultMaxTools     int
+	mcpBlockInternal       bool
 }
 
 type toolsConfig struct {
@@ -77,6 +83,25 @@ func getConfig() (*config, error) {
 		return nil, fmt.Errorf("configuration tools: %w", err)
 	}
 
+	mcpWorkers := 32
+	if v.IsSet("mcp.workers") {
+		mcpWorkers = v.GetInt("mcp.workers")
+		if mcpWorkers <= 0 {
+			return nil, fmt.Errorf("configuration mcp.workers must be positive")
+		}
+	}
+	mcpDefaultMaxTools := 32
+	if v.IsSet("mcp.max_tools") {
+		mcpDefaultMaxTools = v.GetInt("mcp.max_tools")
+		if mcpDefaultMaxTools <= 0 {
+			return nil, fmt.Errorf("configuration mcp.max_tools must be positive")
+		}
+	}
+	mcpBlockInternal := true
+	if v.IsSet("mcp.block_internal") {
+		mcpBlockInternal = v.GetBool("mcp.block_internal")
+	}
+
 	cfg := &config{
 		botToken:               v.GetString("telegram.bot_token"),
 		characterRepoURL:       v.GetString("character_repository_url"),
@@ -84,6 +109,9 @@ func getConfig() (*config, error) {
 		cwd:                    v.GetString("atri_cwd"),
 		defaultMaxRounds:       defaultMaxRounds,
 		defaultToolPermissions: toolsCfg.DefaultPermissions,
+		mcpWorkers:             mcpWorkers,
+		mcpDefaultMaxTools:     mcpDefaultMaxTools,
+		mcpBlockInternal:       mcpBlockInternal,
 	}
 	if cfg.botToken == "" {
 		return nil, fmt.Errorf("required configuration telegram.bot_token is missing")
@@ -103,7 +131,7 @@ func getDB(cfg *config) (*gorm.DB, error) {
 	return gorm.Open(sqlite.Open(filepath.Join(root, "atri-bot.db")))
 }
 
-func getRunner(logger *zap.Logger, cfg *config, db *gorm.DB) *runner.Runner {
+func getRunner(logger *zap.Logger, restyClient *resty.Client, cfg *config, db *gorm.DB) *runner.Runner {
 	return runner.New(logger, &runner.Config{
 		BotToken:               cfg.botToken,
 		CWD:                    cfg.cwd,
@@ -111,11 +139,21 @@ func getRunner(logger *zap.Logger, cfg *config, db *gorm.DB) *runner.Runner {
 		CharacterBranch:        cfg.characterRepoBranch,
 		DefaultMaxRounds:       cfg.defaultMaxRounds,
 		DefaultToolPermissions: cfg.defaultToolPermissions,
+		MCPWorkers:             cfg.mcpWorkers,
+		MCPDefaultMaxTools:     cfg.mcpDefaultMaxTools,
+		MCPBlockInternal:       cfg.mcpBlockInternal,
 
 		ToolRegistrars: []tools.Registrar{
 			email.Register,
+			hotspot.BindedRegister(logger, restyClient),
 		},
 	}, db)
+}
+
+func getRestyClient() *resty.Client {
+	client := resty.New().
+		SetHeader("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36")
+	return client
 }
 
 func run(r *runner.Runner, lc fx.Lifecycle) {
