@@ -1,13 +1,13 @@
 package chat
 
 import (
-	"github.com/chhongzh/atri-bot/internal/tools"
+	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 )
 
-func toolNodeConfig(manager *tools.Manager) compose.ToolsNodeConfig {
+func toolNodeConfig(tools []tool.BaseTool) compose.ToolsNodeConfig {
 	return compose.ToolsNodeConfig{
-		Tools:               manager.Tools(),
+		Tools:               tools,
 		ExecuteSequentially: true,
 	}
 }

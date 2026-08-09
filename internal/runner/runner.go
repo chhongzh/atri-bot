@@ -27,8 +27,9 @@ type Config struct {
 	CharacterRepositoryURL string
 	CharacterBranch        string
 
-	StateTTL         time.Duration
-	DefaultMaxRounds int
+	StateTTL               time.Duration
+	DefaultMaxRounds       int
+	DefaultToolPermissions map[string]bool
 
 	AIModelTimeout time.Duration
 

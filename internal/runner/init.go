@@ -56,10 +56,14 @@ func (r *Runner) Init(ctx context.Context) error {
 	if err := r.characters.Init(ctx); err != nil {
 		return err
 	}
-	r.chats = chat.New(context.WithoutCancel(ctx), r.logger, r.accounts, r.characters, r.sessions, r.tools, chat.Config{
-		StateTTL:     r.cfg.StateTTL,
-		ModelTimeout: r.cfg.AIModelTimeout,
+	r.chats = chat.New(context.WithoutCancel(ctx), r.logger, r.db, r.accounts, r.characters, r.sessions, r.tools, chat.Config{
+		StateTTL:               r.cfg.StateTTL,
+		ModelTimeout:           r.cfg.AIModelTimeout,
+		DefaultToolPermissions: r.cfg.DefaultToolPermissions,
 	})
+	if err := r.chats.Init(); err != nil {
+		return err
+	}
 	r.commands = command.New(r.accounts, r.commandStart, r.sendSystemResultAndDelete)
 	if err := r.registerCommands(); err != nil {
 		return err

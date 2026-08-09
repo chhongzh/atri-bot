@@ -183,6 +183,27 @@ func (m *Manager) Names() []string {
 	return names
 }
 
+// AllNames returns every registered tool name, including builtin tools.
+func (m *Manager) AllNames() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	names := make([]string, 0, len(m.order)+len(m.builtinOrder))
+	names = append(names, m.order...)
+	names = append(names, m.builtinOrder...)
+	return names
+}
+
+// Has reports whether a tool with the given name is registered.
+func (m *Manager) Has(name string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if _, ok := m.registered[name]; ok {
+		return true
+	}
+	_, ok := m.builtins[name]
+	return ok
+}
+
 func (m *Manager) SetConfig(ctx context.Context, userID int64, name string, value []byte) error {
 	m.mu.RLock()
 	registered, ok := m.registered[name]

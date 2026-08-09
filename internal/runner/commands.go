@@ -13,6 +13,7 @@ func (r *Runner) registerCommands() error {
 		r.registerCharacterCommands,
 		r.registerAICommands,
 		r.registerProviderCommands,
+		r.registerToolPermCommands,
 		r.registerAdminCommands,
 	}
 	for _, register := range registrations {

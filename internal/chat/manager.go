@@ -20,6 +20,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
+	"gorm.io/gorm"
 )
 
 var (
@@ -30,17 +31,21 @@ var (
 )
 
 type Config struct {
-	StateTTL     time.Duration
-	ModelTimeout time.Duration
+	StateTTL               time.Duration
+	ModelTimeout           time.Duration
+	DefaultToolPermissions map[string]bool
 }
 
 type Manager struct {
 	logger     *zap.Logger
+	db         *gorm.DB
 	accounts   *account.Manager
 	characters *character.Manager
 	sessions   *session.Manager
 	tools      *toolmanager.Manager
 	cfg        Config
+
+	defaultToolPermissions map[string]bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -52,6 +57,7 @@ type Manager struct {
 func New(
 	ctx context.Context,
 	logger *zap.Logger,
+	db *gorm.DB,
 	accounts *account.Manager,
 	characters *character.Manager,
 	sessions *session.Manager,
@@ -66,15 +72,17 @@ func New(
 	}
 	managerCtx, cancel := context.WithCancel(ctx)
 	return &Manager{
-		logger:     logger,
-		accounts:   accounts,
-		characters: characters,
-		sessions:   sessions,
-		tools:      tools,
-		cfg:        cfg,
-		ctx:        managerCtx,
-		cancel:     cancel,
-		states:     make(map[int64]*UserState),
+		logger:                 logger,
+		db:                     db,
+		accounts:               accounts,
+		characters:             characters,
+		sessions:               sessions,
+		tools:                  tools,
+		cfg:                    cfg,
+		defaultToolPermissions: normalizeDefaultToolPermissions(logger, tools, cfg.DefaultToolPermissions),
+		ctx:                    managerCtx,
+		cancel:                 cancel,
+		states:                 make(map[int64]*UserState),
 	}
 }
 
@@ -252,11 +260,16 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 	if err != nil {
 		return nil, err
 	}
+	tools, err := m.allowedTools(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:        fmt.Sprintf("atri_%d", userID),
 		Description: "A Telegram character chat agent",
 		Model:       model,
-		ToolsConfig: adk.ToolsConfig{ToolsNodeConfig: toolNodeConfig(m.tools)},
+		ToolsConfig: adk.ToolsConfig{ToolsNodeConfig: toolNodeConfig(tools)},
+		Handlers:    []adk.ChatModelAgentMiddleware{&safeToolMiddleware{}},
 	})
 	if err != nil {
 		return nil, err

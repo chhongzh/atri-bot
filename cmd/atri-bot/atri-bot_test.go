@@ -57,6 +57,30 @@ func TestGetConfigRejectsNonPositiveDefaultMaxRounds(t *testing.T) {
 	}
 }
 
+func TestGetConfigParsesDefaultToolPermissions(t *testing.T) {
+	withWorkingDirectory(t, "telegram:\n  bot_token: test-token\ntools:\n  default_permissions:\n    send_email: true\n    get_person_info: false\n")
+
+	cfg, err := getConfig()
+	if err != nil {
+		t.Fatalf("getConfig() error = %v", err)
+	}
+	if !cfg.defaultToolPermissions["send_email"] {
+		t.Errorf("defaultToolPermissions[send_email] = %v, want true", cfg.defaultToolPermissions["send_email"])
+	}
+	if cfg.defaultToolPermissions["get_person_info"] {
+		t.Errorf("defaultToolPermissions[get_person_info] = %v, want false", cfg.defaultToolPermissions["get_person_info"])
+	}
+}
+
+func TestGetConfigRejectsInvalidDefaultToolPermission(t *testing.T) {
+	withWorkingDirectory(t, "telegram:\n  bot_token: test-token\ntools:\n  default_permissions:\n    send_email: maybe\n")
+
+	_, err := getConfig()
+	if err == nil || !strings.Contains(err.Error(), "configuration tools") {
+		t.Fatalf("getConfig() error = %v, want configuration tools error", err)
+	}
+}
+
 func withWorkingDirectory(t *testing.T, config string) {
 	t.Helper()
 	dir := t.TempDir()

@@ -36,11 +36,16 @@ func main() {
 }
 
 type config struct {
-	botToken            string
-	characterRepoURL    string
-	characterRepoBranch string
-	cwd                 string
-	defaultMaxRounds    int
+	botToken               string
+	characterRepoURL       string
+	characterRepoBranch    string
+	cwd                    string
+	defaultMaxRounds       int
+	defaultToolPermissions map[string]bool
+}
+
+type toolsConfig struct {
+	DefaultPermissions map[string]bool `mapstructure:"default_permissions"`
 }
 
 func getLogger() (*zap.Logger, error) {
@@ -67,13 +72,18 @@ func getConfig() (*config, error) {
 			return nil, fmt.Errorf("configuration bot.max_rounds must be positive")
 		}
 	}
+	var toolsCfg toolsConfig
+	if err := v.UnmarshalKey("tools", &toolsCfg); err != nil {
+		return nil, fmt.Errorf("configuration tools: %w", err)
+	}
 
 	cfg := &config{
-		botToken:            v.GetString("telegram.bot_token"),
-		characterRepoURL:    v.GetString("character_repository_url"),
-		characterRepoBranch: v.GetString("character_repository_branch"),
-		cwd:                 v.GetString("atri_cwd"),
-		defaultMaxRounds:    defaultMaxRounds,
+		botToken:               v.GetString("telegram.bot_token"),
+		characterRepoURL:       v.GetString("character_repository_url"),
+		characterRepoBranch:    v.GetString("character_repository_branch"),
+		cwd:                    v.GetString("atri_cwd"),
+		defaultMaxRounds:       defaultMaxRounds,
+		defaultToolPermissions: toolsCfg.DefaultPermissions,
 	}
 	if cfg.botToken == "" {
 		return nil, fmt.Errorf("required configuration telegram.bot_token is missing")
@@ -100,6 +110,7 @@ func getRunner(logger *zap.Logger, cfg *config, db *gorm.DB) *runner.Runner {
 		CharacterRepositoryURL: cfg.characterRepoURL,
 		CharacterBranch:        cfg.characterRepoBranch,
 		DefaultMaxRounds:       cfg.defaultMaxRounds,
+		DefaultToolPermissions: cfg.defaultToolPermissions,
 
 		ToolRegistrars: []tools.Registrar{
 			email.Register,
