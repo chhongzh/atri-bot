@@ -9,7 +9,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-func TestAssistantStreamWriterFlushesAtDoubleNewlineAcrossChunks(t *testing.T) {
+func TestAssistantStreamWriterBuffersUntilFlush(t *testing.T) {
 	var sent []string
 	writer := newAssistantStreamWriter(func(text string) error {
 		sent = append(sent, text)
@@ -24,14 +24,32 @@ func TestAssistantStreamWriterFlushesAtDoubleNewlineAcrossChunks(t *testing.T) {
 	if err := writer.Write("\n第二段"); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := sent, []string{"第一段"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("sent after boundary = %#v, want %#v", got, want)
+	if len(sent) != 0 {
+		t.Fatalf("sent before flush = %#v, want no messages", sent)
 	}
 	if err := writer.Flush(); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := sent, []string{"第一段", "第二段"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("sent after final flush = %#v, want %#v", got, want)
+	}
+}
+
+func TestAssistantStreamWriterDiscardsDraft(t *testing.T) {
+	var sent []string
+	writer := newAssistantStreamWriter(func(text string) error {
+		sent = append(sent, text)
+		return nil
+	})
+	if err := writer.Write("第一段\n\n尚未完成"); err != nil {
+		t.Fatal(err)
+	}
+	writer.Discard()
+	if err := writer.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if len(sent) != 0 {
+		t.Fatalf("sent discarded draft = %#v, want no messages", sent)
 	}
 }
 
@@ -52,7 +70,7 @@ func TestAssistantStreamWriterPreservesWhitespace(t *testing.T) {
 	}
 }
 
-func TestConsumeMessageVariantProcessesChunksBeforeStreamEnds(t *testing.T) {
+func TestConsumeMessageVariantBuffersChunksUntilStreamEnds(t *testing.T) {
 	firstChunkRead := make(chan struct{})
 	allowSecondChunk := make(chan struct{})
 	stream, producer := schema.Pipe[*schema.Message](0)
@@ -82,8 +100,10 @@ func TestConsumeMessageVariantProcessesChunksBeforeStreamEnds(t *testing.T) {
 	}()
 
 	<-firstChunkRead
-	if got := <-sent; got != "第一段" {
-		t.Fatalf("first sent block = %q", got)
+	select {
+	case got := <-sent:
+		t.Fatalf("sent block before stream completed = %q", got)
+	default:
 	}
 	select {
 	case err := <-done:
@@ -94,8 +114,10 @@ func TestConsumeMessageVariantProcessesChunksBeforeStreamEnds(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if got := <-sent; got != "第二段" {
-		t.Fatalf("second sent block = %q", got)
+	for _, want := range []string{"第一段", "第二段"} {
+		if got := <-sent; got != want {
+			t.Fatalf("sent block = %q, want %q", got, want)
+		}
 	}
 }
 

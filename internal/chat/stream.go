@@ -4,6 +4,7 @@ import "strings"
 
 type assistantStreamWriter struct {
 	pending string
+	blocks  []string
 	send    func(string) error
 }
 
@@ -18,24 +19,38 @@ func (w *assistantStreamWriter) Write(text string) error {
 		if boundary < 0 {
 			return nil
 		}
-		if err := w.sendBlock(w.pending[:boundary]); err != nil {
-			return err
-		}
+		w.appendBlock(w.pending[:boundary])
 		w.pending = w.pending[boundary+2:]
 	}
 }
 
-func (w *assistantStreamWriter) Flush() error {
-	if err := w.sendBlock(w.pending); err != nil {
-		return err
-	}
+func (w *assistantStreamWriter) Seal() {
+	w.appendBlock(w.pending)
 	w.pending = ""
+}
+
+func (w *assistantStreamWriter) Flush() error {
+	w.Seal()
+	for index, block := range w.blocks {
+		if w.send == nil {
+			continue
+		}
+		if err := w.send(block); err != nil {
+			w.blocks = w.blocks[index:]
+			return err
+		}
+	}
+	w.blocks = nil
 	return nil
 }
 
-func (w *assistantStreamWriter) sendBlock(text string) error {
-	if text == "" || w.send == nil {
-		return nil
+func (w *assistantStreamWriter) Discard() {
+	w.pending = ""
+	w.blocks = nil
+}
+
+func (w *assistantStreamWriter) appendBlock(text string) {
+	if text != "" {
+		w.blocks = append(w.blocks, text)
 	}
-	return w.send(text)
 }

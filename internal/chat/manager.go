@@ -123,7 +123,7 @@ func (m *Manager) Chat(ctx context.Context, c telebot.Context, text string) erro
 		}
 		accepted, _ := state.TurnLoop.Push(
 			request,
-			adk.WithPreempt[*Request, *schema.Message](adk.AnySafePoint),
+			adk.WithPreemptTimeout[*Request, *schema.Message](adk.AnySafePoint, 0),
 		)
 		if accepted {
 			select {
@@ -383,8 +383,6 @@ func (m *Manager) buildAgent(
 	all = append(all, static...)
 	all = append(all, mcpTools...)
 	return adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
-		Name:        fmt.Sprintf("atri_%d", userID),
-		Description: "A Telegram character chat agent",
 		Model:       model,
 		ToolsConfig: adk.ToolsConfig{ToolsNodeConfig: toolNodeConfig(all)},
 		Handlers:    []adk.ChatModelAgentMiddleware{&safeToolMiddleware{}},
@@ -485,16 +483,15 @@ func (m *Manager) onAgentEvents(
 			}
 			calls := msgops.ToolCalls(chunk)
 			if len(calls) > 0 {
-				if err := streamWriter.Flush(); err != nil {
-					return err
-				}
+				streamWriter.Seal()
 			}
 			return nil
 		})
 		if err != nil {
-			state.finishTurnInputs()
-			completeRequests(turn.Consumed, err)
-			return err
+			if turnErr == nil {
+				turnErr = err
+			}
+			break
 		}
 		if message == nil {
 			continue
@@ -512,6 +509,7 @@ func (m *Manager) onAgentEvents(
 	default:
 	}
 	if stopped {
+		streamWriter.Discard()
 		state.finishTurnInputs()
 		completeRequests(turn.Consumed, ErrStateStopped)
 		return nil
@@ -527,6 +525,7 @@ func (m *Manager) onAgentEvents(
 		preempted = true
 	}
 	if preempted {
+		streamWriter.Discard()
 		interruptedInputs := state.finishTurnInputs()
 		interruptedInputs = append(interruptedInputs, requestTexts(turn.Consumed)...)
 		state.requeueInputs(interruptedInputs)
@@ -538,6 +537,7 @@ func (m *Manager) onAgentEvents(
 		return nil
 	}
 	if turnErr != nil {
+		streamWriter.Discard()
 		state.finishTurnInputs()
 		completeRequests(turn.Consumed, turnErr)
 		return turnErr
