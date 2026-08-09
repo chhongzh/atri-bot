@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: desktop
+    # 桌面端御三家：Windows / macOS / Linux
+    main: ./cmd/atri-bot
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    # go build -x：在 CI 日志中显示编译进度
+    flags:
+      - -x
+
+  - id: android-arm64
+    # 手机端 Android arm64：纯 Go 可执行文件（ELF），供 Termux/adb 直接运行
+    main: ./cmd/atri-bot
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - android
+    goarch:
+      - arm64
+    # go build -x：在 CI 日志中显示编译进度
+    flags:
+      - -x
+
+  - id: android-amd64
+    # android/amd64 强制要求 cgo 外部链接，用 NDK clang 交叉编译。
+    # CI 中由 nttld/setup-ndk 将 NDK 的 llvm bin 加入 PATH，
+    # 因此这里直接使用 x86_64-linux-android24-clang。
+    main: ./cmd/atri-bot
+    env:
+      - CGO_ENABLED=1
+      - CC=x86_64-linux-android24-clang
+    goos:
+      - android
+    goarch:
+      - amd64
+    # go build -x：在 CI 日志中显示编译进度
+    flags:
+      - -x
+
+archives:
+  - id: desktop
+    ids: [desktop]
+    formats: [tar.gz]
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+  - id: android
+    ids: [android-arm64, android-amd64]
+    # Android 不打压缩包，直接发布可执行文件
+    formats: [binary]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+release:
+  footer: >-
+    Made with Love!

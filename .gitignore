@@ -32,3 +32,5 @@ go.work.sum
 # .vscode/
 
 /run
+# Added by goreleaser init:
+dist/

@@ -1,0 +1,85 @@
+name: goreleaser
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "发布版本号（不含 v 前缀），例如 1.2.3"
+        required: true
+        type: string
+      draft:
+        description: "以 Draft 草稿形式创建 Release"
+        required: false
+        default: true
+        type: boolean
+  pull_request:
+  push:
+    branches:
+      - "**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: goreleaser-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      # android/amd64 强制要求 cgo 外部链接，需要 NDK clang 交叉编译。
+      # add-to-path 默认 true，会把 NDK 的 llvm bin 加入 PATH，
+      # .goreleaser.yaml 里 CC 直接使用 x86_64-linux-android24-clang。
+      - name: Set up Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27d
+
+      # zig 工具链（备用）。zig cc 暂无法为 Android 提供 bionic libc，
+      # 因此 cgo 交叉编译走上面的 NDK clang，不通过 zig cc。
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v2
+
+      - name: Create and push tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          [[ "$VERSION" != v* ]] && VERSION="v$VERSION"
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "::error::tag $VERSION already exists"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "release: $VERSION"
+          git push origin "$VERSION"
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          # either 'goreleaser' (default) or 'goreleaser-pro'
+          distribution: goreleaser
+          # 'latest', 'nightly', or a semver
+          version: "~> v2"
+          # PR / 分支 push：只做 snapshot 构建验证，不发布；
+          # 手动触发：正式 release，默认以 Draft 草稿形式创建。
+          args: >-
+            release --clean
+            ${{ (github.event_name == 'push' || github.event_name == 'pull_request') && '--snapshot' || '' }}
+            ${{ inputs.draft && '--draft' || '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Your GoReleaser Pro key, if you are using the 'goreleaser-pro' distribution
+          # GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
