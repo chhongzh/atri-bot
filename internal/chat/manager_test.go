@@ -109,3 +109,17 @@ func TestConsumeMessageVariantPropagatesChunkHandlerError(t *testing.T) {
 		t.Fatalf("consumeMessageVariant() error = %v, want %v", err, want)
 	}
 }
+
+func TestUserStateRequeuesInterruptedInputsBeforeNewInputs(t *testing.T) {
+	state := &UserState{queuedInputs: []string{"开始任务"}}
+	if got, want := state.startTurnInputs(), []string{"开始任务"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("startTurnInputs() = %#v, want %#v", got, want)
+	}
+
+	interrupted := append(state.finishTurnInputs(), "补充参数")
+	state.requeueInputs(interrupted)
+
+	if got, want := state.startTurnInputs(), []string{"开始任务", "补充参数"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("requeued inputs = %#v, want %#v", got, want)
+	}
+}

@@ -45,7 +45,6 @@ type config struct {
 	cwd                    string
 	defaultMaxRounds       int
 	defaultToolPermissions map[string]bool
-	mcpWorkers             int
 	mcpDefaultMaxTools     int
 	mcpBlockInternal       bool
 }
@@ -83,13 +82,6 @@ func getConfig() (*config, error) {
 		return nil, fmt.Errorf("configuration tools: %w", err)
 	}
 
-	mcpWorkers := 32
-	if v.IsSet("mcp.workers") {
-		mcpWorkers = v.GetInt("mcp.workers")
-		if mcpWorkers <= 0 {
-			return nil, fmt.Errorf("configuration mcp.workers must be positive")
-		}
-	}
 	mcpDefaultMaxTools := 32
 	if v.IsSet("mcp.max_tools") {
 		mcpDefaultMaxTools = v.GetInt("mcp.max_tools")
@@ -109,7 +101,6 @@ func getConfig() (*config, error) {
 		cwd:                    v.GetString("atri_cwd"),
 		defaultMaxRounds:       defaultMaxRounds,
 		defaultToolPermissions: toolsCfg.DefaultPermissions,
-		mcpWorkers:             mcpWorkers,
 		mcpDefaultMaxTools:     mcpDefaultMaxTools,
 		mcpBlockInternal:       mcpBlockInternal,
 	}
@@ -139,7 +130,6 @@ func getRunner(logger *zap.Logger, restyClient *resty.Client, cfg *config, db *g
 		CharacterBranch:        cfg.characterRepoBranch,
 		DefaultMaxRounds:       cfg.defaultMaxRounds,
 		DefaultToolPermissions: cfg.defaultToolPermissions,
-		MCPWorkers:             cfg.mcpWorkers,
 		MCPDefaultMaxTools:     cfg.mcpDefaultMaxTools,
 		MCPBlockInternal:       cfg.mcpBlockInternal,
 

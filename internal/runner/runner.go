@@ -34,7 +34,6 @@ type Config struct {
 
 	AIModelTimeout time.Duration
 
-	MCPWorkers         int
 	MCPDefaultMaxTools int
 	MCPBlockInternal   bool
 

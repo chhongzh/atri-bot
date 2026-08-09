@@ -10,18 +10,26 @@ func (r *Runner) sendSystemResultAndDelete(c telebot.Context, result string) err
 }
 
 func (r *Runner) sendSystemResultAndDeleteOpts(c telebot.Context, result string, opts ...interface{}) error {
+	return r.sendTemporaryResult(c, result, true, opts...)
+}
+
+func (r *Runner) sendLoadingResultAndDelete(c telebot.Context, result string) error {
+	return r.sendTemporaryResult(c, result, false)
+}
+
+func (r *Runner) sendTemporaryResult(c telebot.Context, result string, deleteSource bool, opts ...interface{}) error {
 	msg, err := c.Bot().Send(c.Recipient(), result, opts...)
 	if err != nil {
 		return err
 	}
 
 	r.setSystemResultDelete(c.Sender(), func() {
-		err := c.Delete()
-		if err != nil {
-			r.logger.Warn("failed to delete command when sending result", zap.Error(err))
+		if deleteSource {
+			if err := c.Delete(); err != nil {
+				r.logger.Warn("failed to delete source message when deleting system result", zap.Error(err))
+			}
 		}
-		err = c.Bot().Delete(msg)
-		if err != nil {
+		if err := c.Bot().Delete(msg); err != nil {
 			r.logger.Warn("failed to delete result when sending result", zap.Error(err))
 		}
 	})
@@ -60,6 +68,12 @@ func (r *Runner) deleteSystemResult(user *telebot.User) {
 
 	if deleteFunc != nil {
 		deleteFunc()
+	}
+}
+
+func (r *Runner) onMessageSent(c telebot.Context) {
+	if c != nil {
+		r.deleteSystemResult(c.Sender())
 	}
 }
 

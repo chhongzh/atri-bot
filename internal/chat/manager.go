@@ -37,7 +37,8 @@ type Config struct {
 	StateTTL               time.Duration
 	ModelTimeout           time.Duration
 	DefaultToolPermissions map[string]bool
-	SendSystemResult       func(telebot.Context, string) error
+	SendLoadingResult      func(telebot.Context, string) error
+	OnMessageSent          func(telebot.Context)
 }
 
 type Manager struct {
@@ -250,8 +251,8 @@ func (m *Manager) state(ctx context.Context, userID int64, c telebot.Context) (*
 
 func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context) (*UserState, error) {
 	startedAt := time.Now()
-	if m.cfg.SendSystemResult != nil {
-		if err := m.cfg.SendSystemResult(c, "正在加载聊天状态，请稍候。"); err != nil {
+	if m.cfg.SendLoadingResult != nil {
+		if err := m.cfg.SendLoadingResult(c, "正在加载聊天状态，请稍候。"); err != nil {
 			m.logger.Warn("failed to send chat state loading message",
 				zap.Int64("user_id", userID),
 				zap.Error(err),
@@ -299,8 +300,36 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 	if err != nil {
 		return nil, err
 	}
-	agent, err := m.buildAgent(ctx, chatModel, userID, nil)
+	var mcpResult *mcpmanager.LoadResult
+	if m.mcp != nil {
+		mcpResult, err = m.mcp.Load(ctx, userID, func(ctx context.Context) (bool, error) {
+			return m.ToolAllowed(ctx, userID, "mcp")
+		})
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, mcpmanager.ErrLoaderClosed) {
+				return nil, err
+			}
+			m.logger.Warn("mcp loading failed",
+				zap.Int64("user_id", userID),
+				zap.Error(err),
+			)
+			mcpResult = nil
+		}
+	}
+	var mcpTools []tool.BaseTool
+	if mcpResult != nil {
+		if len(mcpResult.Tools) == 0 {
+			mcpResult.Close()
+			mcpResult = nil
+		} else {
+			mcpTools = mcpResult.Tools
+		}
+	}
+	agent, err := m.buildAgent(ctx, chatModel, userID, mcpTools)
 	if err != nil {
+		if mcpResult != nil {
+			mcpResult.Close()
+		}
 		return nil, err
 	}
 	runner := adk.NewRunner(ctx, adk.RunnerConfig{Agent: agent, EnableStreaming: true})
@@ -311,7 +340,9 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 		Agent:          agent,
 		Runner:         runner,
 		TelebotContext: c,
-		model:          chatModel,
+	}
+	if mcpResult != nil {
+		state.mcpClose = mcpResult.Close
 	}
 	state.TurnLoop = adk.NewTurnLoop(adk.TurnLoopConfig[*Request, *schema.Message]{
 		GenInput: func(turnCtx context.Context, _ *adk.TurnLoop[*Request, *schema.Message], items []*Request) (*adk.GenInputResult[*Request, *schema.Message], error) {
@@ -324,20 +355,11 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 			return m.onAgentEvents(turnCtx, state, turn, events)
 		},
 	})
-	if m.mcp != nil {
-		cancelLoad, loadErr := m.mcp.LoadAsync(userID, func(ctx context.Context) (bool, error) {
-			return m.ToolAllowed(ctx, userID, "mcp")
-		}, func(result *mcpmanager.LoadResult, loadErr error) {
-			m.attachMCPTools(state, result, loadErr)
-		})
-		if loadErr != nil {
-			m.logger.Warn("failed to enqueue mcp loading",
-				zap.Int64("user_id", userID),
-				zap.Error(loadErr),
-			)
-		} else {
-			state.setMCPLoadCancel(cancelLoad)
-		}
+	if len(mcpTools) > 0 {
+		m.logger.Info("attached mcp tools to chat state",
+			zap.Int64("user_id", userID),
+			zap.Int("mcp_tools", len(mcpTools)),
+		)
 	}
 	m.logger.Info("created user chat state",
 		zap.Int64("user_id", userID),
@@ -369,47 +391,11 @@ func (m *Manager) buildAgent(
 	})
 }
 
-func (m *Manager) attachMCPTools(state *UserState, result *mcpmanager.LoadResult, loadErr error) {
-	if loadErr != nil {
-		if errors.Is(loadErr, context.Canceled) {
-			return
-		}
-		m.logger.Warn("mcp loading failed",
-			zap.Int64("user_id", state.UserID),
-			zap.Error(loadErr),
-		)
-		return
-	}
-	if result == nil {
-		return
-	}
-	if len(result.Tools) == 0 {
-		result.Close()
-		return
-	}
-	agent, err := m.buildAgent(context.Background(), state.model, state.UserID, result.Tools)
-	if err != nil {
-		result.Close()
-		m.logger.Warn("failed to rebuild agent with mcp tools",
-			zap.Int64("user_id", state.UserID),
-			zap.Error(err),
-		)
-		return
-	}
-	if !state.attachMCP(agent, result.Tools, result.Close) {
-		result.Close()
-		return
-	}
-	m.logger.Info("attached mcp tools to chat state",
-		zap.Int64("user_id", state.UserID),
-		zap.Int("mcp_tools", len(result.Tools)),
-	)
-}
-
 func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Request) (*adk.GenInputResult[*Request, *schema.Message], error) {
 	if len(items) == 0 {
 		return nil, errors.New("turn loop received no chat requests")
 	}
+	interruptedInputs := state.startTurnInputs()
 	latest := items[len(items)-1]
 	sender := latest.Context.Sender()
 	username := ""
@@ -424,9 +410,12 @@ func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Reque
 	if err != nil {
 		return nil, err
 	}
-	messages := make([]*schema.Message, 0, len(history)+len(items)+1)
+	messages := make([]*schema.Message, 0, len(history)+len(interruptedInputs)+len(items)+1)
 	messages = append(messages, schema.SystemMessage(systemPrompt))
 	messages = append(messages, history...)
+	for _, input := range interruptedInputs {
+		messages = append(messages, schema.UserMessage(input))
+	}
 	for _, item := range items {
 		messages = append(messages, schema.UserMessage(item.Text))
 	}
@@ -439,6 +428,7 @@ func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Reque
 		zap.Int64("user_id", state.UserID),
 		zap.String("character_id", state.CharacterID),
 		zap.Int("history_messages", len(history)),
+		zap.Int("resumed_inputs", len(interruptedInputs)),
 		zap.Int("consumed_requests", len(items)),
 	)
 	return &adk.GenInputResult[*Request, *schema.Message]{
@@ -460,7 +450,13 @@ func (m *Manager) onAgentEvents(
 	)
 	latest := turn.Consumed[len(turn.Consumed)-1]
 	streamWriter := newAssistantStreamWriter(func(text string) error {
-		return utils.SendTelegramText(latest.Context, text)
+		if err := utils.SendTelegramText(latest.Context, text); err != nil {
+			return err
+		}
+		if m.cfg.OnMessageSent != nil {
+			m.cfg.OnMessageSent(latest.Context)
+		}
+		return nil
 	})
 	for {
 		event, ok := events.Next()
@@ -496,6 +492,7 @@ func (m *Manager) onAgentEvents(
 			return nil
 		})
 		if err != nil {
+			state.finishTurnInputs()
 			completeRequests(turn.Consumed, err)
 			return err
 		}
@@ -515,6 +512,7 @@ func (m *Manager) onAgentEvents(
 	default:
 	}
 	if stopped {
+		state.finishTurnInputs()
 		completeRequests(turn.Consumed, ErrStateStopped)
 		return nil
 	}
@@ -529,20 +527,32 @@ func (m *Manager) onAgentEvents(
 		preempted = true
 	}
 	if preempted {
+		interruptedInputs := state.finishTurnInputs()
+		interruptedInputs = append(interruptedInputs, requestTexts(turn.Consumed)...)
+		state.requeueInputs(interruptedInputs)
 		completeRequests(turn.Consumed, ErrTurnPreempted)
-		m.logger.Debug("chat turn preempted", zap.Int64("user_id", state.UserID))
+		m.logger.Debug("chat turn preempted",
+			zap.Int64("user_id", state.UserID),
+			zap.Int("queued_inputs", len(interruptedInputs)),
+		)
 		return nil
 	}
 	if turnErr != nil {
+		state.finishTurnInputs()
 		completeRequests(turn.Consumed, turnErr)
 		return turnErr
 	}
 	if err := streamWriter.Flush(); err != nil {
+		state.finishTurnInputs()
 		completeRequests(turn.Consumed, err)
 		return err
 	}
 
-	persisted := make([]*schema.Message, 0, len(turn.Consumed)+len(outputs))
+	interruptedInputs := state.finishTurnInputs()
+	persisted := make([]*schema.Message, 0, len(interruptedInputs)+len(turn.Consumed)+len(outputs))
+	for _, input := range interruptedInputs {
+		persisted = append(persisted, schema.UserMessage(input))
+	}
 	for _, item := range turn.Consumed {
 		persisted = append(persisted, schema.UserMessage(item.Text))
 	}
@@ -632,6 +642,14 @@ func completeRequests(requests []*Request, err error) {
 	for _, request := range requests {
 		request.complete(err)
 	}
+}
+
+func requestTexts(requests []*Request) []string {
+	texts := make([]string, 0, len(requests))
+	for _, request := range requests {
+		texts = append(texts, request.Text)
+	}
+	return texts
 }
 
 func firstNonEmpty(values ...string) string {

@@ -4,17 +4,29 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// TestLoadAsyncLoadsRealMCPServer exercises the whole loader chain against a
-// real in-process SSE MCP server: connect, initialize, list tools, audit wrap
-// and remote invocation.
-func TestLoadAsyncLoadsRealMCPServer(t *testing.T) {
+func TestLoadLoadsRealSSEMCPServer(t *testing.T) {
+	mcpServer := newIntegrationMCPServer()
+	sseServer := server.NewTestServer(mcpServer)
+	defer sseServer.Close()
+
+	testLoadLoadsRealMCPServer(t, sseServer.URL+"/sse")
+}
+
+func TestLoadLoadsRealStreamableHTTPMCPServer(t *testing.T) {
+	mcpServer := newIntegrationMCPServer()
+	httpServer := server.NewTestStreamableHTTPServer(mcpServer)
+	defer httpServer.Close()
+
+	testLoadLoadsRealMCPServer(t, httpServer.URL)
+}
+
+func newIntegrationMCPServer() *server.MCPServer {
 	mcpServer := server.NewMCPServer("integration", "1.0.0")
 	mcpServer.AddTool(
 		mcp.NewTool("remote_echo",
@@ -25,44 +37,27 @@ func TestLoadAsyncLoadsRealMCPServer(t *testing.T) {
 			return mcp.NewToolResultText("echo:" + message), nil
 		},
 	)
-	sseServer := server.NewTestServer(mcpServer)
-	defer sseServer.Close()
+	return mcpServer
+}
 
+func testLoadLoadsRealMCPServer(t *testing.T, endpoint string) {
+	t.Helper()
 	manager, _ := newTestManager(t, Config{BlockInternal: false})
-	if err := manager.Start(); err != nil {
-		t.Fatal(err)
-	}
 	defer manager.Close()
 
 	ctx := context.Background()
-	if _, err := manager.Add(ctx, 42, "echo", sseServer.URL+"/sse", "", ""); err != nil {
+	if _, err := manager.Add(ctx, 42, "echo", endpoint, "", ""); err != nil {
 		t.Fatal(err)
 	}
 
-	done := make(chan struct{})
-	var tools []tool.BaseTool
-	var loadResult *LoadResult
-	if _, err := manager.LoadAsync(42, func(context.Context) (bool, error) {
+	loadResult, err := manager.Load(ctx, 42, func(context.Context) (bool, error) {
 		return true, nil
-	}, func(result *LoadResult, err error) {
-		defer close(done)
-		if err != nil {
-			t.Errorf("load error = %v", err)
-			return
-		}
-		if result != nil {
-			tools = result.Tools
-			loadResult = result
-		}
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-
-	select {
-	case <-done:
-	case <-time.After(15 * time.Second):
-		t.Fatal("mcp load timed out")
-	}
+	defer loadResult.Close()
+	tools := loadResult.Tools
 	if len(tools) != 1 {
 		t.Fatalf("loaded tools = %d, want 1", len(tools))
 	}
@@ -84,5 +79,4 @@ func TestLoadAsyncLoadsRealMCPServer(t *testing.T) {
 	if !strings.Contains(output, "echo:hello") {
 		t.Fatalf("tool output = %q, want echo:hello", output)
 	}
-	loadResult.Close()
 }

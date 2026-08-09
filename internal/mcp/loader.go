@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	einomcp "github.com/cloudwego/eino-ext/components/tool/mcp"
@@ -21,95 +23,40 @@ const (
 	connectTimeout = 30 * time.Second
 )
 
-type providerLoadJob struct {
-	ctx           context.Context
-	index         int
-	userID        int64
-	provider      MCPProvider
-	blockInternal bool
-	result        chan<- providerLoadResult
-}
-
 type providerLoadResult struct {
-	index int
 	tools []tool.BaseTool
 	close func()
 	err   error
-}
-
-func (m *Manager) worker(workerID int) {
-	defer m.workersWG.Done()
-	for {
-		select {
-		case <-m.ctx.Done():
-			return
-		case job := <-m.jobs:
-			m.runProviderJob(workerID, job)
-		}
-	}
-}
-
-func (m *Manager) runProviderJob(workerID int, job providerLoadJob) {
-	loaded, closeFn, err := m.loadProvider(job.ctx, job.userID, &job.provider, job.blockInternal)
-	if err == nil && job.ctx.Err() != nil {
-		if closeFn != nil {
-			closeFn()
-		}
-		loaded = nil
-		closeFn = nil
-		err = job.ctx.Err()
-	}
-	job.result <- providerLoadResult{
-		index: job.index,
-		tools: loaded,
-		close: closeFn,
-		err:   err,
-	}
-	if err != nil && !errors.Is(err, context.Canceled) {
-		m.logger.Warn("failed to load mcp provider",
-			zap.Int("worker", workerID),
-			zap.Int64("user_id", job.userID),
-			zap.String("provider", job.provider.Name),
-			zap.String("url_host", urlHost(job.provider.URL)),
-			zap.Error(err),
-		)
-	}
 }
 
 func (m *Manager) loadUserTools(
 	ctx context.Context,
 	userID int64,
 	gate func(context.Context) (bool, error),
-	callback func(*LoadResult, error),
-) {
+) (*LoadResult, error) {
 	if gate != nil {
 		allowed, err := gate(ctx)
 		if err != nil {
 			m.logger.Warn("mcp gate check failed", zap.Int64("user_id", userID), zap.Error(err))
-			callback(nil, err)
-			return
+			return nil, err
 		}
 		if !allowed {
 			m.logger.Info("mcp loading skipped: permission denied", zap.Int64("user_id", userID))
-			callback(nil, nil)
-			return
+			return nil, nil
 		}
 	}
 
 	providers, err := m.List(ctx, userID)
 	if err != nil {
-		callback(nil, err)
-		return
+		return nil, err
 	}
 	maxTools, err := m.maxToolsFor(ctx, userID)
 	if err != nil {
-		callback(nil, err)
-		return
+		return nil, err
 	}
 	blockInternal, err := m.blockInternalFor(ctx, userID)
 	if err != nil {
-		callback(nil, err)
-		return
+		return nil, err
 	}
 	if len(providers) > maxTools {
 		m.logger.Warn("mcp provider limit exceeded; extra providers skipped",
@@ -120,49 +67,42 @@ func (m *Manager) loadUserTools(
 		providers = providers[:maxTools]
 	}
 	if len(providers) == 0 {
-		callback(&LoadResult{}, nil)
-		return
+		return &LoadResult{}, nil
 	}
 
 	m.logger.Info("loading mcp providers",
 		zap.Int64("user_id", userID),
 		zap.Int("providers", len(providers)),
 	)
-	results := make(chan providerLoadResult, len(providers))
-	queued := 0
+	loadedProviders := make([]providerLoadResult, len(providers))
+	var waitGroup sync.WaitGroup
 	for i := range providers {
-		job := providerLoadJob{
-			ctx:           ctx,
-			index:         i,
-			userID:        userID,
-			provider:      providers[i],
-			blockInternal: blockInternal,
-			result:        results,
-		}
-		select {
-		case m.jobs <- job:
-			queued++
-		case <-ctx.Done():
-			callback(nil, ctx.Err())
-			return
-		}
-	}
-
-	loadedProviders := make([]providerLoadResult, queued)
-	for completed := 0; completed < queued; completed++ {
-		select {
-		case result := <-results:
-			loadedProviders[result.index] = result
-		case <-ctx.Done():
-			for i := range loadedProviders {
-				if loadedProviders[i].close != nil {
-					loadedProviders[i].close()
+		waitGroup.Add(1)
+		go func(index int) {
+			defer waitGroup.Done()
+			provider := &providers[index]
+			loaded, closeFn, loadErr := m.loadProvider(ctx, userID, provider, blockInternal)
+			if loadErr == nil && ctx.Err() != nil {
+				if closeFn != nil {
+					closeFn()
 				}
+				loaded = nil
+				closeFn = nil
+				loadErr = ctx.Err()
 			}
-			callback(nil, ctx.Err())
-			return
-		}
+			loadedProviders[index] = providerLoadResult{tools: loaded, close: closeFn, err: loadErr}
+			if loadErr != nil && !errors.Is(loadErr, context.Canceled) {
+				m.logger.Warn("failed to load mcp provider",
+					zap.Int64("user_id", userID),
+					zap.String("provider", provider.Name),
+					zap.String("url_host", urlHost(provider.URL)),
+					zap.Error(loadErr),
+				)
+			}
+		}(i)
 	}
+	waitGroup.Wait()
+
 	loadResult := &LoadResult{}
 	failed := 0
 	for i := range loadedProviders {
@@ -177,16 +117,15 @@ func (m *Manager) loadUserTools(
 	}
 	if ctx.Err() != nil {
 		loadResult.Close()
-		callback(nil, ctx.Err())
-		return
+		return nil, ctx.Err()
 	}
 	m.logger.Info("finished loading mcp providers",
 		zap.Int64("user_id", userID),
-		zap.Int("providers", queued),
+		zap.Int("providers", len(providers)),
 		zap.Int("failed_providers", failed),
 		zap.Int("tools", len(loadResult.Tools)),
 	)
-	callback(loadResult, nil)
+	return loadResult, nil
 }
 
 func (m *Manager) loadProvider(
@@ -209,21 +148,80 @@ func (m *Manager) loadProvider(
 		return nil, nil, err
 	}
 
-	httpClient, closeHTTPClient := newMCPHTTPClient(blockInternal)
-	mcpClient, err := client.NewSSEMCPClient(
-		provider.URL,
-		client.WithHeaders(headers),
-		client.WithHTTPClient(httpClient),
-		transport.WithEndpointTimeout(connectTimeout),
+	loaded, closeFn, err := m.loadProviderWithTransport(
+		ctx,
+		connectCtx,
+		userID,
+		provider,
+		headers,
+		meta,
+		blockInternal,
+		"streamable_http",
+		func(httpClient *http.Client) (*client.Client, error) {
+			return client.NewStreamableHttpClient(
+				provider.URL,
+				transport.WithHTTPBasicClient(httpClient),
+				transport.WithHTTPHeaders(headers),
+			)
+		},
+	)
+	if err == nil {
+		return loaded, closeFn, nil
+	}
+	if !errors.Is(err, transport.ErrLegacySSEServer) {
+		return nil, nil, err
+	}
+	streamableErr := err
+	m.logger.Debug("mcp provider requires legacy sse transport",
+		zap.Int64("user_id", userID),
+		zap.String("provider", provider.Name),
+		zap.String("url_host", urlHost(provider.URL)),
+	)
+	loaded, closeFn, err = m.loadProviderWithTransport(
+		ctx,
+		connectCtx,
+		userID,
+		provider,
+		headers,
+		meta,
+		blockInternal,
+		"sse",
+		func(httpClient *http.Client) (*client.Client, error) {
+			return client.NewSSEMCPClient(
+				provider.URL,
+				client.WithHeaders(headers),
+				client.WithHTTPClient(httpClient),
+				transport.WithEndpointTimeout(connectTimeout),
+			)
+		},
 	)
 	if err != nil {
+		return nil, nil, fmt.Errorf("streamable http: %v; legacy sse: %w", streamableErr, err)
+	}
+	return loaded, closeFn, nil
+}
+
+func (m *Manager) loadProviderWithTransport(
+	ctx context.Context,
+	connectCtx context.Context,
+	userID int64,
+	provider *MCPProvider,
+	headers map[string]string,
+	meta *mcpprotocol.Meta,
+	blockInternal bool,
+	transportName string,
+	newClient func(*http.Client) (*client.Client, error),
+) ([]tool.BaseTool, func(), error) {
+	httpClient, closeHTTPClient := newMCPHTTPClient(blockInternal)
+	mcpClient, err := newClient(httpClient)
+	if err != nil {
 		closeHTTPClient()
-		return nil, nil, fmt.Errorf("create sse mcp client: %w", err)
+		return nil, nil, fmt.Errorf("create %s mcp client: %w", transportName, err)
 	}
 	if err = mcpClient.Start(ctx); err != nil {
 		_ = mcpClient.Close()
 		closeHTTPClient()
-		return nil, nil, fmt.Errorf("start sse mcp client: %w", err)
+		return nil, nil, fmt.Errorf("start %s mcp client: %w", transportName, err)
 	}
 	initRequest := mcpprotocol.InitializeRequest{}
 	initRequest.Params.ProtocolVersion = mcpprotocol.LATEST_PROTOCOL_VERSION
@@ -231,7 +229,7 @@ func (m *Manager) loadProvider(
 	if _, err = mcpClient.Initialize(connectCtx, initRequest); err != nil {
 		_ = mcpClient.Close()
 		closeHTTPClient()
-		return nil, nil, fmt.Errorf("initialize mcp client: %w", err)
+		return nil, nil, fmt.Errorf("initialize %s mcp client: %w", transportName, err)
 	}
 	rawTools, err := einomcp.GetTools(connectCtx, &einomcp.Config{
 		Cli:           mcpClient,
@@ -241,7 +239,7 @@ func (m *Manager) loadProvider(
 	if err != nil {
 		_ = mcpClient.Close()
 		closeHTTPClient()
-		return nil, nil, fmt.Errorf("list mcp tools: %w", err)
+		return nil, nil, fmt.Errorf("list %s mcp tools: %w", transportName, err)
 	}
 
 	audited := make([]tool.BaseTool, 0, len(rawTools))
@@ -255,6 +253,7 @@ func (m *Manager) loadProvider(
 				zap.Int64("user_id", userID),
 				zap.String("provider", provider.Name),
 				zap.String("url_host", urlHost(provider.URL)),
+				zap.String("transport", transportName),
 				zap.Error(closeErr),
 			)
 		}
@@ -263,6 +262,7 @@ func (m *Manager) loadProvider(
 		zap.Int64("user_id", userID),
 		zap.String("provider", provider.Name),
 		zap.String("url_host", urlHost(provider.URL)),
+		zap.String("transport", transportName),
 		zap.Int("tools", len(audited)),
 	)
 	return audited, closeFn, nil

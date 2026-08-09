@@ -37,7 +37,6 @@ func (r *Runner) Init(ctx context.Context) error {
 		return err
 	}
 	r.mcp = mcpmanager.New(context.WithoutCancel(ctx), r.logger, r.db, r.accounts, mcpmanager.Config{
-		Workers:         r.cfg.MCPWorkers,
 		DefaultMaxTools: r.cfg.MCPDefaultMaxTools,
 		BlockInternal:   r.cfg.MCPBlockInternal,
 	})
@@ -73,7 +72,8 @@ func (r *Runner) Init(ctx context.Context) error {
 		StateTTL:               r.cfg.StateTTL,
 		ModelTimeout:           r.cfg.AIModelTimeout,
 		DefaultToolPermissions: r.cfg.DefaultToolPermissions,
-		SendSystemResult:       r.sendSystemResultAndDelete,
+		SendLoadingResult:      r.sendLoadingResultAndDelete,
+		OnMessageSent:          r.onMessageSent,
 	})
 	if err := r.chats.Init(); err != nil {
 		return err
@@ -86,7 +86,7 @@ func (r *Runner) Init(ctx context.Context) error {
 		return err
 	}
 
-	r.bot.Use(r.middlewareForLogging, r.middlewareForCommandResultCleanup, r.accounts.UserMiddleware)
+	r.bot.Use(r.middlewareForLogging, r.middlewareForSystemResultCleanup, r.accounts.UserMiddleware)
 	r.bot.Handle(telebot.OnText, r.handlerForText)
 	for _, endpoint := range []string{
 		telebot.OnMedia,
@@ -101,7 +101,7 @@ func (r *Runner) Init(ctx context.Context) error {
 	} {
 		r.bot.Handle(endpoint, r.handlerForUnsupportedMedia)
 	}
-	return r.mcp.Start()
+	return nil
 }
 
 func (r *Runner) initBot() error {

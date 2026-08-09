@@ -221,25 +221,21 @@ func TestSetValueCanAddNestedHeader(t *testing.T) {
 	}
 }
 
-func TestLoadAsyncCanBeCanceledWithChatState(t *testing.T) {
-	manager, _ := newTestManager(t, Config{BlockInternal: false, Workers: 1})
-	if err := manager.Start(); err != nil {
-		t.Fatal(err)
-	}
+func TestLoadCanBeCanceledWithChatState(t *testing.T) {
+	manager, _ := newTestManager(t, Config{BlockInternal: false})
 	defer manager.Close()
 
 	gateStarted := make(chan struct{})
 	done := make(chan error, 1)
-	cancel, err := manager.LoadAsync(7, func(ctx context.Context) (bool, error) {
-		close(gateStarted)
-		<-ctx.Done()
-		return false, ctx.Err()
-	}, func(_ *LoadResult, loadErr error) {
-		done <- loadErr
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		_, err := manager.Load(ctx, 7, func(ctx context.Context) (bool, error) {
+			close(gateStarted)
+			<-ctx.Done()
+			return false, ctx.Err()
+		})
+		done <- err
+	}()
 	<-gateStarted
 	cancel()
 	select {
@@ -252,69 +248,38 @@ func TestLoadAsyncCanBeCanceledWithChatState(t *testing.T) {
 	}
 }
 
-func TestLoadAsyncRequiresStartedLoader(t *testing.T) {
+func TestLoadRejectsClosedLoader(t *testing.T) {
 	manager, _ := newTestManager(t, Config{})
-	if _, err := manager.LoadAsync(7, nil, func(*LoadResult, error) {}); !errors.Is(err, ErrLoaderNotStarted) {
-		t.Fatalf("LoadAsync error = %v, want ErrLoaderNotStarted", err)
+	manager.Close()
+	if _, err := manager.Load(context.Background(), 7, nil); !errors.Is(err, ErrLoaderClosed) {
+		t.Fatalf("Load error = %v, want ErrLoaderClosed", err)
 	}
 }
 
-func TestLoadAsyncHonoursGateAndRunsCallback(t *testing.T) {
+func TestLoadHonoursGate(t *testing.T) {
 	manager, _ := newTestManager(t, Config{BlockInternal: false})
-	if err := manager.Start(); err != nil {
-		t.Fatal(err)
-	}
 	defer manager.Close()
 
-	deniedDone := make(chan struct{})
-	var deniedResult *LoadResult
-	var deniedErr error
-	if _, err := manager.LoadAsync(7, func(context.Context) (bool, error) {
+	deniedResult, deniedErr := manager.Load(context.Background(), 7, func(context.Context) (bool, error) {
 		return false, nil
-	}, func(result *LoadResult, err error) {
-		deniedResult = result
-		deniedErr = err
-		close(deniedDone)
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	loadedDone := make(chan struct{})
-	var loadedCount int
-	var loadedErr error
-	if _, err := manager.LoadAsync(7, func(context.Context) (bool, error) {
+	})
+	loadedResult, loadedErr := manager.Load(context.Background(), 7, func(context.Context) (bool, error) {
 		return true, nil
-	}, func(result *LoadResult, err error) {
-		loadedErr = err
-		if result != nil {
-			loadedCount = len(result.Tools)
-			result.Close()
-		}
-		close(loadedDone)
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	select {
-	case <-deniedDone:
-	case <-time.After(2 * time.Second):
-		t.Fatal("denied callback was not invoked")
-	}
+	})
 	if deniedResult != nil {
 		t.Fatalf("denied result = %#v, want nil", deniedResult)
 	}
 	if deniedErr != nil {
 		t.Fatalf("denied err = %v", deniedErr)
 	}
-	select {
-	case <-loadedDone:
-	case <-time.After(2 * time.Second):
-		t.Fatal("loaded callback was not invoked")
-	}
 	if loadedErr != nil {
 		t.Fatalf("loaded err = %v", loadedErr)
 	}
-	if loadedCount != 0 {
-		t.Fatalf("loaded tools = %d, want 0", loadedCount)
+	if loadedResult == nil {
+		t.Fatal("loaded result is nil")
+	}
+	defer loadedResult.Close()
+	if len(loadedResult.Tools) != 0 {
+		t.Fatalf("loaded tools = %d, want 0", len(loadedResult.Tools))
 	}
 }

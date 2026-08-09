@@ -12,7 +12,7 @@ func (r *Runner) middlewareForLogging(next telebot.HandlerFunc) telebot.HandlerF
 	}
 }
 
-func (r *Runner) middlewareForCommandResultCleanup(next telebot.HandlerFunc) telebot.HandlerFunc {
+func (r *Runner) middlewareForSystemResultCleanup(next telebot.HandlerFunc) telebot.HandlerFunc {
 	return func(c telebot.Context) error {
 		r.deleteSystemResult(c.Sender())
 		return next(c)

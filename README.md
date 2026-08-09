@@ -31,7 +31,6 @@ bot:
 - `bot.max_rounds`：新用户的默认会话轮数；用户可单独修改。
 - `tools.default_permissions`：工具的默认用户权限，`工具名: true/false`。
   未在配置中出现且没有单独设置的工具默认对所有用户可用。
-- `mcp.workers`：MCP provider 异步加载 worker 数，默认 `32`。
 - `mcp.max_tools`：每个用户可添加的 MCP provider 上限，默认 `32`。
 - `mcp.block_internal`：是否拦截 localhost、内网域名和私网 IP，默认 `true`。
 
@@ -41,7 +40,6 @@ tools:
     send_email: true
     get_person_info: false
 mcp:
-  workers: 32
   max_tools: 32
   block_internal: true
 ```

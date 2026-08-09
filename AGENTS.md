@@ -149,13 +149,12 @@ character_repository_branch: "v2"
 
 # MCP 外部工具（可选）
 mcp:
-  workers: 32          # 异步加载 worker 数
   max_tools: 32        # 每用户 MCP provider 上限，管理员可用 /mcp limit 单独覆盖
   block_internal: true # 默认拦截 localhost/.internal/私网地址，管理员可用 /mcp internal 单独覆盖
 ```
 
 - `bot.max_rounds` 只决定新用户的初始轮数，不是共享模型配置。
-- `mcp.workers`、`mcp.max_tools`、`mcp.block_internal` 为全局默认值；每用户上限与内网拦截开关可由管理员通过 `/mcp` 命令单独调整，`/toolperm deny <user-id> mcp` 可一键禁用该用户的全部 MCP 能力。
+- `mcp.max_tools`、`mcp.block_internal` 为全局默认值；每用户上限与内网拦截开关可由管理员通过 `/mcp` 命令单独调整，`/toolperm deny <user-id> mcp` 可一键禁用该用户的全部 MCP 能力。
 - 不得新增全局 `ai_base_url`、`ai_key` 或 `ai_model` 默认项。
 - 不提交真实 Token、API Key、SMTP 凭据、数据库文件或远程仓库缓存。
 

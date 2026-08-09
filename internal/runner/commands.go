@@ -49,12 +49,15 @@ func (r *Runner) broadcastAdmins(ctx context.Context, message string) {
 		return
 	}
 	for _, admin := range admins {
-		if _, err = r.bot.Send(&telebot.User{ID: admin.TelegramID}, message); err != nil {
+		recipient := &telebot.User{ID: admin.TelegramID}
+		if _, err = r.bot.Send(recipient, message); err != nil {
 			r.logger.Warn("failed to notify administrator",
 				zap.Int64("admin_id", admin.TelegramID),
 				zap.Error(err),
 			)
+			continue
 		}
+		r.deleteSystemResult(recipient)
 	}
 }
 

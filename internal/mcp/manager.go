@@ -11,10 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const (
-	DefaultWorkers  = 32
-	DefaultMaxTools = 32
-)
+const DefaultMaxTools = 32
 
 var (
 	ErrProviderNotFound = errors.New("mcp provider not found")
@@ -23,12 +20,10 @@ var (
 	ErrInvalidJSON      = errors.New("invalid mcp provider json field")
 	ErrPathNotFound     = errors.New("mcp provider path not found")
 	ErrPathForbidden    = errors.New("mcp provider path is read-only")
-	ErrLoaderNotStarted = errors.New("mcp loader is not started")
 	ErrLoaderClosed     = errors.New("mcp loader is closed")
 )
 
 type Config struct {
-	Workers         int
 	DefaultMaxTools int
 	BlockInternal   bool
 }
@@ -52,8 +47,7 @@ func (r *LoadResult) Close() {
 	})
 }
 
-// Manager owns MCP provider records, connection lifetimes and the bounded
-// provider loader pool.
+// Manager owns MCP provider records and connection lifetimes.
 type Manager struct {
 	db       *gorm.DB
 	logger   *zap.Logger
@@ -62,12 +56,9 @@ type Manager struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
-	jobs   chan providerLoadJob
 
 	lifecycleMu sync.Mutex
-	started     bool
 	closed      bool
-	workersWG   sync.WaitGroup
 	requestsWG  sync.WaitGroup
 	providersMu sync.Mutex
 
@@ -76,9 +67,6 @@ type Manager struct {
 }
 
 func New(ctx context.Context, logger *zap.Logger, db *gorm.DB, accounts *account.Manager, cfg Config) *Manager {
-	if cfg.Workers <= 0 {
-		cfg.Workers = DefaultWorkers
-	}
 	if cfg.DefaultMaxTools <= 0 {
 		cfg.DefaultMaxTools = DefaultMaxTools
 	}
@@ -90,7 +78,6 @@ func New(ctx context.Context, logger *zap.Logger, db *gorm.DB, accounts *account
 		cfg:      cfg,
 		ctx:      managerCtx,
 		cancel:   cancel,
-		jobs:     make(chan providerLoadJob, cfg.Workers*4),
 	}
 }
 
@@ -98,31 +85,8 @@ func (m *Manager) Init() error {
 	return m.db.AutoMigrate(&MCPProvider{})
 }
 
-// Start starts the fixed-size provider loader pool exactly once.
-func (m *Manager) Start() error {
-	m.lifecycleMu.Lock()
-	defer m.lifecycleMu.Unlock()
-	if m.closed {
-		return ErrLoaderClosed
-	}
-	if m.started {
-		return nil
-	}
-	m.started = true
-	for workerID := 0; workerID < m.cfg.Workers; workerID++ {
-		m.workersWG.Add(1)
-		go m.worker(workerID)
-	}
-	m.logger.Info("started mcp loader workers",
-		zap.Int("workers", m.cfg.Workers),
-		zap.Int("default_max_tools", m.cfg.DefaultMaxTools),
-		zap.Bool("block_internal", m.cfg.BlockInternal),
-	)
-	return nil
-}
-
-// Close cancels queued loads and active connections, then waits for all
-// loader requests and workers to exit. It is safe to call more than once.
+// Close cancels active loads and waits for them to exit. It is safe to call
+// more than once.
 func (m *Manager) Close() {
 	m.lifecycleMu.Lock()
 	if m.closed {
@@ -134,8 +98,7 @@ func (m *Manager) Close() {
 	m.lifecycleMu.Unlock()
 
 	m.requestsWG.Wait()
-	m.workersWG.Wait()
-	m.logger.Info("stopped mcp loader workers")
+	m.logger.Info("stopped mcp loader")
 }
 
 func (m *Manager) SetOnChange(handler func(userID int64)) {
@@ -153,34 +116,46 @@ func (m *Manager) notifyChange(userID int64) {
 	}
 }
 
-// LoadAsync loads one user's providers through the shared worker pool. The
-// returned cancel function belongs to the chat state and must be called when
-// that state is invalidated.
-func (m *Manager) LoadAsync(
+// Load loads one user's providers concurrently and returns only after every
+// provider has finished.
+func (m *Manager) Load(
+	ctx context.Context,
 	userID int64,
 	gate func(context.Context) (bool, error),
-	callback func(*LoadResult, error),
-) (context.CancelFunc, error) {
-	if callback == nil {
-		return nil, errors.New("mcp load callback is nil")
-	}
-
+) (*LoadResult, error) {
 	m.lifecycleMu.Lock()
 	if m.closed {
 		m.lifecycleMu.Unlock()
 		return nil, ErrLoaderClosed
 	}
-	if !m.started {
-		m.lifecycleMu.Unlock()
-		return nil, ErrLoaderNotStarted
-	}
 	requestCtx, cancel := context.WithCancel(m.ctx)
 	m.requestsWG.Add(1)
 	m.lifecycleMu.Unlock()
 
-	go func() {
-		defer m.requestsWG.Done()
-		m.loadUserTools(requestCtx, userID, gate, callback)
-	}()
-	return cancel, nil
+	stopCancel := context.AfterFunc(ctx, cancel)
+	defer m.requestsWG.Done()
+	if err := ctx.Err(); err != nil {
+		stopCancel()
+		cancel()
+		return nil, err
+	}
+	result, err := m.loadUserTools(requestCtx, userID, gate)
+	stopCancel()
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		if result != nil {
+			result.Close()
+		}
+		cancel()
+		return nil, ctxErr
+	}
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	if result == nil {
+		cancel()
+		return nil, nil
+	}
+	result.closers = append(result.closers, cancel)
+	return result, nil
 }
