@@ -289,7 +289,7 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 		missing = append(missing, "model")
 	}
 	if len(missing) > 0 {
-		return nil, fmt.Errorf("%w: missing %s; use /ai to configure", ErrAIConfigIncomplete, strings.Join(missing, ", "))
+		return nil, fmt.Errorf("%w: missing %s", ErrAIConfigIncomplete, strings.Join(missing, ", "))
 	}
 	chatModel, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
 		BaseURL: strings.TrimSpace(user.AIBaseURL),
