@@ -2,6 +2,7 @@ package hotspot
 
 import (
 	"context"
+	"strings"
 
 	"github.com/antchfx/htmlquery"
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
@@ -17,7 +18,12 @@ type config struct {
 type input struct {
 }
 
+type hotspotInfo struct {
+	Title string `json:"title"`
+	Link  string `json:"link"`
+}
 type result struct {
+	Baidu []*hotspotInfo `json:"baidu"`
 }
 
 func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *config, input *input, logger *zap.Logger, restyClient *resty.Client) (*result, error) {
@@ -47,19 +53,34 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to find text nodes")
 	}
+	var baiduHotspots []*hotspotInfo
 	for _, text := range texts {
-		panic(123)
-		_ = text.Data
+		title := strings.TrimSpace(text.FirstChild.Data)
+		link := "no data"
+		if text.Parent != nil && text.Parent.Parent != nil && text.Parent.Parent.Parent != nil && text.Parent.Parent.Parent.Parent != nil && len(text.Parent.Parent.Parent.Parent.Attr) > 0 {
+			for _, attr := range text.Parent.Parent.Parent.Parent.Attr {
+				if attr.Key == "href" {
+					link = attr.Val
+					break
+				}
+			}
+		}
+
+		baiduHotspots = append(baiduHotspots, &hotspotInfo{
+			title, link,
+		})
 	}
 
-	return &result{}, nil
+	return &result{
+		baiduHotspots,
+	}, nil
 }
 
 // BindedRegister 使用闭包，捕获一些变量
 func BindedRegister(logger *zap.Logger, restyClient *resty.Client) func(manager *toolmanager.Manager) error {
 	logger = logger.Named("hotspot tool")
 	fn := func(manager *toolmanager.Manager) error {
-		return toolmanager.Register(manager, "get_hotspot", "在网络上搜索最新热点.", config{},
+		return toolmanager.Register(manager, "get_hotspot", "在百度等网络平台上搜索最新热点. 返回标题和链接, 除非用户显式要求你输出链接, 否则不要直接输出链接, 只需给出标题即可.", config{},
 			func(ctx context.Context, runningState *toolmanager.RunningState, cfg *config, input *input) (*result, error) {
 				return tool(ctx, runningState, cfg, input, logger, restyClient)
 			})
