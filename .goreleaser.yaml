@@ -20,8 +20,8 @@ builds:
       - amd64
       - arm64
     # go build -x：在 CI 日志中显示编译进度
-    flags:
-      - -x
+    
+      
 
   - id: android-arm64
     # 手机端 Android arm64：纯 Go 可执行文件（ELF），供 Termux/adb 直接运行
@@ -33,8 +33,8 @@ builds:
     goarch:
       - arm64
     # go build -x：在 CI 日志中显示编译进度
-    flags:
-      - -x
+    
+    
 
   - id: android-amd64
     # android/amd64 强制要求 cgo 外部链接，用 NDK clang 交叉编译。
@@ -49,8 +49,8 @@ builds:
     goarch:
       - amd64
     # go build -x：在 CI 日志中显示编译进度
-    flags:
-      - -x
+    
+    
 
 archives:
   - id: desktop
