@@ -103,6 +103,8 @@ MCP 使用特殊权限名 `mcp` 作为一刀切总开关。禁止后，用户的
   1. `version`：发布版本号，例如 `1.2.3`（自动补 `v` 前缀并创建 tag）。
   2. `draft`：默认勾选，以 Draft 草稿形式发布；确认无误后可在 Release 页面手动发布。
 
-所有发布目标均启用 CGO 并使用 Zig 交叉编译。Android 构建额外使用 CI 安装的
-Android NDK（`nttld/setup-ndk`，`r27d`）提供 bionic 头文件和库；最终产物为可直接
-运行的 ELF 可执行文件。
+Android 交叉编译说明：
+
+- 桌面端与 `android/arm64` 均禁用 CGO，保持纯 Go 交叉编译。
+- `android/amd64` 需要 CGO 外部链接，CI 使用 Android NDK 的 clang（`nttld/setup-ndk`，
+  `r27d`）构建；产物同样为可直接运行的 ELF 可执行文件。

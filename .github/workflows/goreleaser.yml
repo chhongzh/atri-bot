@@ -39,26 +39,11 @@ jobs:
           go-version: 1.27.0-rc.2
           
 
-      # Android 目标仍使用 Zig 作为 C/C++ 编译器；NDK 只提供 bionic
-      # 头文件和库，路径通过 ANDROID_NDK_ROOT 传给 GoReleaser。
+      # android/amd64 使用 NDK clang；其他目标不启用 CGO。
       - name: Set up Android NDK
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r27d
-
-      # Zig 的 Darwin target 需要 SDK 的头文件和系统库。
-      - name: Set up macOS SDK
-        run: |
-          set -euo pipefail
-          SDK_ARCHIVE="$RUNNER_TEMP/MacOSX11.3.sdk.tar.xz"
-          curl --fail --location --retry 3 \
-            --output "$SDK_ARCHIVE" \
-            https://github.com/phracker/MacOSX-SDKs/releases/download/11.3/MacOSX11.3.sdk.tar.xz
-          tar -xJf "$SDK_ARCHIVE" -C "$RUNNER_TEMP"
-          echo "SDKROOT=$RUNNER_TEMP/MacOSX11.3.sdk" >> "$GITHUB_ENV"
-
-      - name: Set up Zig
-        uses: mlugg/setup-zig@v2
 
       - name: Create and push tag
         if: github.event_name == 'workflow_dispatch'

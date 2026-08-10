@@ -11,35 +11,7 @@ builds:
     # 桌面端御三家：Windows / macOS / Linux
     main: ./cmd/atri-bot
     env:
-      - CGO_ENABLED=1
-      - >-
-        {{- if eq .Os "darwin" }}
-          {{- if eq .Arch "amd64" }}CC=zig cc -target x86_64-macos -isysroot {{ .Env.SDKROOT }} -L {{ .Env.SDKROOT }}/usr/lib -F {{ .Env.SDKROOT }}/System/Library/Frameworks{{- end }}
-          {{- if eq .Arch "arm64" }}CC=zig cc -target aarch64-macos -isysroot {{ .Env.SDKROOT }} -L {{ .Env.SDKROOT }}/usr/lib -F {{ .Env.SDKROOT }}/System/Library/Frameworks{{- end }}
-        {{- else if eq .Os "linux" }}
-          {{- if eq .Arch "amd64" }}CC=zig cc -target x86_64-linux-musl -lc{{- end }}
-          {{- if eq .Arch "arm64" }}CC=zig cc -target aarch64-linux-musl -lc{{- end }}
-        {{- else if eq .Os "windows" }}
-          {{- if eq .Arch "amd64" }}CC=zig cc -target x86_64-windows-gnu -lc{{- end }}
-          {{- if eq .Arch "arm64" }}CC=zig cc -target aarch64-windows-gnu -lc{{- end }}
-        {{- end }}
-      - >-
-        {{- if eq .Os "darwin" }}
-          {{- if eq .Arch "amd64" }}CXX=zig c++ -target x86_64-macos -isysroot {{ .Env.SDKROOT }} -L {{ .Env.SDKROOT }}/usr/lib -F {{ .Env.SDKROOT }}/System/Library/Frameworks{{- end }}
-          {{- if eq .Arch "arm64" }}CXX=zig c++ -target aarch64-macos -isysroot {{ .Env.SDKROOT }} -L {{ .Env.SDKROOT }}/usr/lib -F {{ .Env.SDKROOT }}/System/Library/Frameworks{{- end }}
-        {{- else if eq .Os "linux" }}
-          {{- if eq .Arch "amd64" }}CXX=zig c++ -target x86_64-linux-musl -lc{{- end }}
-          {{- if eq .Arch "arm64" }}CXX=zig c++ -target aarch64-linux-musl -lc{{- end }}
-        {{- else if eq .Os "windows" }}
-          {{- if eq .Arch "amd64" }}CXX=zig c++ -target x86_64-windows-gnu -lc{{- end }}
-          {{- if eq .Arch "arm64" }}CXX=zig c++ -target aarch64-windows-gnu -lc{{- end }}
-        {{- end }}
-      - >-
-        {{- if eq .Os "darwin" }}CGO_CFLAGS=-isysroot {{ .Env.SDKROOT }}{{- end }}
-      - >-
-        {{- if eq .Os "darwin" }}CGO_CXXFLAGS=-isysroot {{ .Env.SDKROOT }}{{- end }}
-      - >-
-        {{- if eq .Os "darwin" }}CGO_LDFLAGS=-isysroot {{ .Env.SDKROOT }} -L {{ .Env.SDKROOT }}/usr/lib -F {{ .Env.SDKROOT }}/System/Library/Frameworks{{- end }}
+      - CGO_ENABLED=0
     goos:
       - linux
       - windows
@@ -47,46 +19,33 @@ builds:
     goarch:
       - amd64
       - arm64
-    ldflags:
-      - -linkmode=external -s -w
     # go build -x：在 CI 日志中显示编译进度
     
       
 
   - id: android-arm64
-    # Android 的 libc 头文件来自 CI 安装的 NDK；链接器仍使用 Zig。
+    # Android arm64 不需要 CGO，可直接交叉编译。
     main: ./cmd/atri-bot
     env:
-      - CGO_ENABLED=1
-      - CC=zig cc -target aarch64-linux-android -lc
-      - CXX=zig c++ -target aarch64-linux-android -lc
-      - CGO_CFLAGS=-D__ANDROID_API__=24 -isystem {{ .Env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include -isystem {{ .Env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/aarch64-linux-android
-      - CGO_LDFLAGS=-L{{ .Env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/24 -llog
+      - CGO_ENABLED=0
     goos:
       - android
     goarch:
       - arm64
-    ldflags:
-      - -linkmode=external -s -w
     # go build -x：在 CI 日志中显示编译进度
     
     
 
   - id: android-amd64
-    # Android 的 libc 头文件来自 CI 安装的 NDK；链接器仍使用 Zig。
+    # Go 对 android/amd64 要求外部链接，使用 NDK clang。
     main: ./cmd/atri-bot
     env:
       - CGO_ENABLED=1
-      - CC=zig cc -target x86_64-linux-android -lc
-      - CXX=zig c++ -target x86_64-linux-android -lc
-      - CGO_CFLAGS=-D__ANDROID_API__=24 -isystem {{ .Env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include -isystem {{ .Env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android
-      - CGO_LDFLAGS=-L{{ .Env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/24 -llog
+      - CC={{ .Env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang
     goos:
       - android
     goarch:
       - amd64
-    ldflags:
-      - -linkmode=external -s -w
     # go build -x：在 CI 日志中显示编译进度
     
     
