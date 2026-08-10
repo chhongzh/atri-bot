@@ -61,5 +61,13 @@ func (r *Runner) commandAdmin(c telebot.Context, args []string) {
 	r.chats.Invalidate(targetID)
 	message := fmt.Sprintf("管理员 %d 执行了 %s，目标用户 %d。", sender.ID, args[0], targetID)
 	_ = r.sendSystemResultAndDelete(c, message)
-	r.broadcastAdmins(ctx, message)
+	r.sendAdminMessage(ctx, c.Bot(), adminMessage{
+		Title:    "操作通知",
+		Category: "账户管理",
+		Fields: []adminMessageField{
+			{Label: "操作管理员 ID", Value: strconv.FormatInt(sender.ID, 10)},
+			{Label: "操作", Value: args[0]},
+			{Label: "目标用户 ID", Value: strconv.FormatInt(targetID, 10)},
+		},
+	})
 }

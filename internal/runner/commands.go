@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"context"
 	"fmt"
 
 	"go.uber.org/zap"
@@ -40,25 +39,6 @@ func (r *Runner) commandError(c telebot.Context, err error) {
 		)
 	}
 	_ = r.sendSystemResultAndDelete(c, "操作失败："+err.Error())
-}
-
-func (r *Runner) broadcastAdmins(ctx context.Context, message string) {
-	admins, err := r.accounts.Admins(ctx)
-	if err != nil {
-		r.logger.Error("failed to list administrators", zap.Error(err))
-		return
-	}
-	for _, admin := range admins {
-		recipient := &telebot.User{ID: admin.TelegramID}
-		if _, err = r.bot.Send(recipient, message); err != nil {
-			r.logger.Warn("failed to notify administrator",
-				zap.Int64("admin_id", admin.TelegramID),
-				zap.Error(err),
-			)
-			continue
-		}
-		r.deleteSystemResult(recipient)
-	}
 }
 
 func requireArgs(args []string, count int, usage string) error {
