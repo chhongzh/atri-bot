@@ -61,6 +61,32 @@ func (r *Runner) broadcastAdmins(ctx context.Context, message string) {
 	}
 }
 
+func (r *Runner) notifyAdminsOfError(ctx context.Context, bot telebot.API, user *telebot.User, err error) {
+	if r.accounts == nil || bot == nil || user == nil {
+		return
+	}
+	admins, listErr := r.accounts.Admins(ctx)
+	if listErr != nil {
+		r.logger.Error("failed to list administrators for error notification", zap.Error(listErr))
+		return
+	}
+
+	errorMessage := "未知错误"
+	if err != nil {
+		errorMessage = err.Error()
+	}
+	message := fmt.Sprintf("用户处理消息时发生错误。\n用户 ID：%d\n用户名：@%s\n错误：\n%s", user.ID, user.Username, errorMessage)
+	for _, admin := range admins {
+		if _, sendErr := bot.Send(&telebot.User{ID: admin.TelegramID}, message); sendErr != nil {
+			r.logger.Warn("failed to notify administrator about user error",
+				zap.Int64("admin_id", admin.TelegramID),
+				zap.Int64("user_id", user.ID),
+				zap.Error(sendErr),
+			)
+		}
+	}
+}
+
 func requireArgs(args []string, count int, usage string) error {
 	if len(args) < count {
 		return fmt.Errorf("用法：%s", usage)

@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/chhongzh/atri-bot/internal/chat"
@@ -11,7 +12,10 @@ import (
 	"gopkg.in/telebot.v4"
 )
 
-const chatActionRefreshInterval = 4 * time.Second
+const (
+	chatActionRefreshInterval = 4 * time.Second
+	errorResultPrefix         = "发生了错误，请联系机器人管理员处理：\n```\n"
+)
 
 func (r *Runner) handlerForText(c telebot.Context) error {
 	text := c.Text()
@@ -66,4 +70,25 @@ func (r *Runner) handlerForError(err error, c telebot.Context) {
 		)
 	}
 	r.logger.Error("failed to handle telegram update", fields...)
+
+	if c == nil || c.Sender() == nil {
+		return
+	}
+	r.notifyAdminsOfError(context.Background(), c.Bot(), c.Sender(), err)
+	if sendErr := r.sendSystemResultAndDeleteOpts(c, formatErrorResult(err), telebot.ModeMarkdownV2); sendErr != nil {
+		r.logger.Warn("failed to send error result to user",
+			zap.Int64("user_id", c.Sender().ID),
+			zap.Error(sendErr),
+		)
+	}
+}
+
+func formatErrorResult(err error) string {
+	message := "未知错误"
+	if err != nil {
+		message = err.Error()
+	}
+	message = strings.ReplaceAll(message, "\\", "\\\\")
+	message = strings.ReplaceAll(message, "`", "\\`")
+	return errorResultPrefix + message + "\n```"
 }
