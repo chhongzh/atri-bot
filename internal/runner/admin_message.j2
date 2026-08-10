@@ -1,0 +1,10 @@
+*{{ Message.Title }}*
+
+{% if Message.Category %}*通知类型：* {{ Message.Category }}
+{% endif %}{% for field in Message.Fields %}*{{ field.Label }}：* `{{ field.Value }}`
+{% endfor %}{% if Message.DetailLabel %}
+*{{ Message.DetailLabel }}：*
+```
+{{ Message.Detail }}
+```
+{% endif %}

@@ -3,7 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
-	"strings"
+	"fmt"
 	"time"
 
 	"github.com/chhongzh/atri-bot/internal/chat"
@@ -74,7 +74,16 @@ func (r *Runner) handlerForError(err error, c telebot.Context) {
 	if c == nil || c.Sender() == nil {
 		return
 	}
-	r.notifyAdminsOfError(context.Background(), c.Bot(), c.Sender(), err)
+	r.sendAdminMessage(context.Background(), c.Bot(), adminMessage{
+		Title:    "错误通知",
+		Category: "消息处理错误",
+		Fields: []adminMessageField{
+			{Label: "用户 ID", Value: fmt.Sprint(c.Sender().ID)},
+			{Label: "用户名", Value: "@" + c.Sender().Username},
+		},
+		DetailLabel: "错误详情",
+		Detail:      formatErrorDetail(err),
+	})
 	if sendErr := r.sendSystemResultAndDeleteOpts(c, formatErrorResult(err), telebot.ModeMarkdownV2); sendErr != nil {
 		r.logger.Warn("failed to send error result to user",
 			zap.Int64("user_id", c.Sender().ID),
@@ -84,11 +93,5 @@ func (r *Runner) handlerForError(err error, c telebot.Context) {
 }
 
 func formatErrorResult(err error) string {
-	message := "未知错误"
-	if err != nil {
-		message = err.Error()
-	}
-	message = strings.ReplaceAll(message, "\\", "\\\\")
-	message = strings.ReplaceAll(message, "`", "\\`")
-	return errorResultPrefix + message + "\n```"
+	return errorResultPrefix + escapeMarkdownV2Code(formatErrorDetail(err)) + "\n```"
 }

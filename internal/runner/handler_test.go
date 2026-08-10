@@ -24,8 +24,11 @@ func TestErrorHandlerSendsTemporaryResultAndNotifiesAdmins(t *testing.T) {
 	if len(api.results) != 2 {
 		t.Fatalf("sent results = %d, want 2", len(api.results))
 	}
-	if api.results[0].recipient.ID != 10 || api.results[0].text != "用户处理消息时发生错误。\n用户 ID：1\n用户名：@\n错误：\nunexpected `failure`\\path" {
+	if api.results[0].recipient.ID != 10 || api.results[0].text != "*错误通知*\n\n*通知类型：* 消息处理错误\n*用户 ID：* `1`\n*用户名：* `@`\n\n*错误详情：*\n```\nunexpected \\`failure\\`\\\\path\n```" {
 		t.Fatalf("administrator notification = %#v", api.results[0])
+	}
+	if api.results[0].parseMode != telebot.ModeMarkdownV2 {
+		t.Fatalf("administrator parse mode = %q, want %q", api.results[0].parseMode, telebot.ModeMarkdownV2)
 	}
 	if api.results[1].recipient.ID != 1 || api.results[1].text != "发生了错误，请联系机器人管理员处理：\n```\nunexpected \\`failure\\`\\\\path\n```" {
 		t.Fatalf("user error result = %#v", api.results[1])
@@ -39,6 +42,25 @@ func TestErrorHandlerSendsTemporaryResultAndNotifiesAdmins(t *testing.T) {
 	}
 	if api.resultDeletes != 1 {
 		t.Fatalf("error result deletes = %d, want 1", api.resultDeletes)
+	}
+}
+
+func TestRenderAdminMessageFormatsOperationFields(t *testing.T) {
+	message, err := renderAdminMessage(context.Background(), adminMessage{
+		Title:    "操作通知",
+		Category: "账户管理",
+		Fields: []adminMessageField{
+			{Label: "操作管理员 ID", Value: "10"},
+			{Label: "操作", Value: "ban"},
+			{Label: "目标用户 ID", Value: "20"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "*操作通知*\n\n*通知类型：* 账户管理\n*操作管理员 ID：* `10`\n*操作：* `ban`\n*目标用户 ID：* `20`"
+	if message != want {
+		t.Fatalf("message = %q, want %q", message, want)
 	}
 }
 
