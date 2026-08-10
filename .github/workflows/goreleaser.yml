@@ -36,7 +36,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version: 1.27.0-rc.2
+          
 
       # android/amd64 强制要求 cgo 外部链接，需要 NDK clang 交叉编译。
       # add-to-path 默认 true，会把 NDK 的 llvm bin 加入 PATH，
