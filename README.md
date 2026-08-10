@@ -105,6 +105,6 @@ MCP 使用特殊权限名 `mcp` 作为一刀切总开关。禁止后，用户的
 
 Android 交叉编译说明：
 
-- `android/arm64`：纯 Go 构建（`CGO_ENABLED=0`），产物为可直接运行的 ELF 可执行文件。
-- `android/amd64`：Go 要求 cgo 外部链接，CI 使用 Android NDK 的 clang
-  （`nttld/setup-ndk`，`r27d`）交叉编译，产物同样为可执行文件。
+- 桌面端与 `android/arm64` 均禁用 CGO，保持纯 Go 交叉编译。
+- `android/amd64` 需要 CGO 外部链接，CI 使用 Android NDK 的 clang（`nttld/setup-ndk`，
+  `r27d`）构建；产物同样为可直接运行的 ELF 可执行文件。

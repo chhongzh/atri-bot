@@ -39,18 +39,11 @@ jobs:
           go-version: 1.27.0-rc.2
           
 
-      # android/amd64 强制要求 cgo 外部链接，需要 NDK clang 交叉编译。
-      # add-to-path 默认 true，会把 NDK 的 llvm bin 加入 PATH，
-      # .goreleaser.yaml 里 CC 直接使用 x86_64-linux-android24-clang。
+      # android/amd64 使用 NDK clang；其他目标不启用 CGO。
       - name: Set up Android NDK
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r27d
-
-      # zig 工具链（备用）。zig cc 暂无法为 Android 提供 bionic libc，
-      # 因此 cgo 交叉编译走上面的 NDK clang，不通过 zig cc。
-      - name: Set up Zig
-        uses: mlugg/setup-zig@v2
 
       - name: Create and push tag
         if: github.event_name == 'workflow_dispatch'
