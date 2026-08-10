@@ -20,7 +20,8 @@ type User struct {
 	AIBaseURL   string
 	AIAPIKey    string
 	AIModel     string
-	AIMaxRounds int `gorm:"not null;default:36"`
+	AIMaxRounds int  `gorm:"not null;default:36"`
+	Verbose     bool `gorm:"not null;default:false"`
 
 	MCPMaxTools      int `gorm:"not null;default:0"`
 	MCPBlockInternal *bool
@@ -33,4 +34,12 @@ type Stats struct {
 	Users  int64
 	Admins int64
 	Banned int64
+}
+
+// UserListFilter limits account listings to a single account category.
+// A nil Role and Banned includes every account.
+type UserListFilter struct {
+	Role   *Role
+	Banned *bool
+	Limit  int
 }

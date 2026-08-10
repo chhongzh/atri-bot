@@ -4,16 +4,35 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/chhongzh/atri-bot/internal/account"
 	"gopkg.in/telebot.v4"
 )
 
 func (r *Runner) registerAdminCommands() error {
-	if err := r.commands.RegisterProvider("admin", "账户管理（管理员）", true); err != nil {
+	if err := r.commands.RegisterProvider("admin", "用户与运行状态管理（管理员）", true); err != nil {
 		return err
 	}
-	return r.commands.Register("admin", "统计、提权、降级、封禁与删除账户", "admin", "/admin [stats|promote|demote|ban|unban|delete] [user-id]", r.commandAdmin)
+	if err := r.commands.Register("admin", "列出所有管理员", "admins", "/admins", r.commandAdmins); err != nil {
+		return err
+	}
+	if err := r.commands.Register("admin", "列出用户账户", "users", "/users [all|banned]", r.commandUsers); err != nil {
+		return err
+	}
+	if err := r.commands.Register("admin", "列出活跃聊天状态", "active-users", "/active-users", r.commandActiveUsers); err != nil {
+		return err
+	}
+	if err := r.commands.Register("admin", "查看用户详情", "user", "/user <user-id>", r.commandUser); err != nil {
+		return err
+	}
+	return r.commands.Register(
+		"admin",
+		"查看统计或管理账户权限",
+		"admin",
+		"/admin [stats|promote|demote|ban|unban|delete] [user-id]",
+		r.commandAdmin,
+	)
 }
 
 func (r *Runner) commandAdmin(c telebot.Context, args []string) {
@@ -21,53 +40,54 @@ func (r *Runner) commandAdmin(c telebot.Context, args []string) {
 	if sender == nil {
 		return
 	}
-	ctx := context.Background()
-	if len(args) == 0 || args[0] == "stats" {
-		stats, err := r.accounts.Stats(ctx)
-		if err != nil {
-			r.commandError(c, err)
-			return
-		}
-		_ = r.sendSystemResultAndDelete(c, fmt.Sprintf("用户：%d\n管理员：%d\n封禁：%d", stats.Users, stats.Admins, stats.Banned))
+	action := commandAction(args, "stats")
+	switch action {
+	case "stats":
+		r.showAdminStats(c, context.Background())
 		return
-	}
-	if err := requireArgs(args, 2, "/admin [promote|demote|ban|unban|delete] <user-id>"); err != nil {
-		r.commandError(c, err)
-		return
-	}
-	targetID, err := strconv.ParseInt(args[1], 10, 64)
-	if err != nil {
-		r.commandError(c, fmt.Errorf("无效用户 ID：%w", err))
-		return
-	}
-	switch args[0] {
-	case "promote":
-		err = r.accounts.SetRole(ctx, sender.ID, targetID, account.RoleAdmin)
-	case "demote":
-		err = r.accounts.SetRole(ctx, sender.ID, targetID, account.RoleUser)
-	case "ban":
-		err = r.accounts.SetBanned(ctx, sender.ID, targetID, true)
-	case "unban":
-		err = r.accounts.SetBanned(ctx, sender.ID, targetID, false)
-	case "delete":
-		err = r.accounts.Delete(ctx, sender.ID, targetID)
+	case "promote", "demote", "ban", "unban", "delete":
 	default:
-		err = fmt.Errorf("未知管理员操作 %q", args[0])
+		r.commandError(c, fmt.Errorf("未知管理员操作 %q", action))
+		return
 	}
+
+	targetID, err := parseUserID(args, 1, "/admin <promote|demote|ban|unban|delete> <user-id>")
 	if err != nil {
 		r.commandError(c, err)
 		return
 	}
+	ctx := context.Background()
+	if err = r.changeAccount(ctx, sender.ID, targetID, action); err != nil {
+		r.commandError(c, err)
+		return
+	}
+
 	r.chats.Invalidate(targetID)
-	message := fmt.Sprintf("管理员 %d 执行了 %s，目标用户 %d。", sender.ID, args[0], targetID)
-	_ = r.sendSystemResultAndDelete(c, message)
+	_ = r.sendSystemResultAndDelete(c, fmt.Sprintf("已对用户 %d 执行 %s。", targetID, action))
 	r.sendAdminMessage(ctx, c.Bot(), adminMessage{
 		Title:    "操作通知",
 		Category: "账户管理",
 		Fields: []adminMessageField{
 			{Label: "操作管理员 ID", Value: strconv.FormatInt(sender.ID, 10)},
-			{Label: "操作", Value: args[0]},
+			{Label: "操作", Value: action},
 			{Label: "目标用户 ID", Value: strconv.FormatInt(targetID, 10)},
 		},
 	})
+}
+
+func (r *Runner) changeAccount(ctx context.Context, actorID, targetID int64, action string) error {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "promote":
+		return r.accounts.SetRole(ctx, actorID, targetID, account.RoleAdmin)
+	case "demote":
+		return r.accounts.SetRole(ctx, actorID, targetID, account.RoleUser)
+	case "ban":
+		return r.accounts.SetBanned(ctx, actorID, targetID, true)
+	case "unban":
+		return r.accounts.SetBanned(ctx, actorID, targetID, false)
+	case "delete":
+		return r.accounts.Delete(ctx, actorID, targetID)
+	default:
+		return fmt.Errorf("未知管理员操作 %q", action)
+	}
 }

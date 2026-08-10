@@ -22,7 +22,9 @@ func (r *Runner) commandAI(c telebot.Context, args []string) {
 		return
 	}
 	ctx := context.Background()
-	if len(args) == 0 || args[0] == "show" {
+	action := commandAction(args, "show")
+	switch action {
+	case "show":
 		user, err := r.accounts.Get(ctx, sender.ID)
 		if err != nil {
 			r.commandError(c, err)
@@ -36,14 +38,18 @@ func (r *Runner) commandAI(c telebot.Context, args []string) {
 			user.AIMaxRounds,
 		))
 		return
+	case "base-url", "key", "model", "rounds":
+	default:
+		r.commandError(c, fmt.Errorf("未知 AI 配置项 %q", action))
+		return
 	}
-	if err := requireArgs(args, 2, "/ai [base-url|key|model|rounds] <value>"); err != nil {
+
+	value, err := requiredValue(args, 1, "/ai [base-url|key|model|rounds] <value>")
+	if err != nil {
 		r.commandError(c, err)
 		return
 	}
-	value := strings.Join(args[1:], " ")
-	var err error
-	switch args[0] {
+	switch action {
 	case "base-url":
 		err = r.accounts.SetAIBaseURL(ctx, sender.ID, value)
 	case "key":
@@ -54,11 +60,9 @@ func (r *Runner) commandAI(c telebot.Context, args []string) {
 		rounds, parseErr := strconv.Atoi(value)
 		if parseErr != nil || rounds <= 0 {
 			err = fmt.Errorf("rounds 必须是正整数")
-			break
+		} else {
+			err = r.accounts.SetAIMaxRounds(ctx, sender.ID, rounds)
 		}
-		err = r.accounts.SetAIMaxRounds(ctx, sender.ID, rounds)
-	default:
-		err = fmt.Errorf("未知 AI 配置项 %q", args[0])
 	}
 	if err != nil {
 		r.commandError(c, err)

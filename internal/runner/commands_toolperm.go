@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"gopkg.in/telebot.v4"
@@ -14,47 +13,47 @@ func (r *Runner) registerToolPermCommands() error {
 	if err := r.commands.RegisterProvider("toolperm", "工具权限管理（管理员）", true); err != nil {
 		return err
 	}
-	return r.commands.Register("toolperm", "查看或修改用户工具权限", "toolperm", "/toolperm [list|allow|deny|reset] <user-id> [tool-name]", r.commandToolPerm)
+	return r.commands.Register("toolperm", "查看或修改用户工具权限", "toolperm", "/toolperm <list|allow|deny|reset> <user-id> [tool-name]", r.commandToolPerm)
 }
 
 func (r *Runner) commandToolPerm(c telebot.Context, args []string) {
-	sender := c.Sender()
-	if sender == nil {
+	action := commandAction(args, "")
+	if action == "" {
+		r.commandError(c, fmt.Errorf("用法：/toolperm <list|allow|deny|reset> <user-id> [tool-name]"))
 		return
 	}
-	ctx := context.Background()
-	if len(args) == 0 || args[0] == "list" {
-		if err := requireArgs(args, 2, "/toolperm list <user-id>"); err != nil {
-			r.commandError(c, err)
-			return
-		}
-		targetID, err := strconv.ParseInt(args[1], 10, 64)
-		if err != nil {
-			r.commandError(c, fmt.Errorf("无效用户 ID：%w", err))
-			return
-		}
-		r.showToolPermissions(c, ctx, targetID)
+	switch action {
+	case "list", "allow", "deny", "reset":
+	default:
+		r.commandError(c, fmt.Errorf("未知工具权限操作 %q", action))
 		return
 	}
-	if err := requireArgs(args, 3, "/toolperm [allow|deny|reset] <user-id> <tool-name>"); err != nil {
+	targetID, err := parseUserID(args, 1, "/toolperm "+action+" <user-id> [tool-name]")
+	if err != nil {
 		r.commandError(c, err)
 		return
 	}
-	targetID, err := strconv.ParseInt(args[1], 10, 64)
-	if err != nil {
-		r.commandError(c, fmt.Errorf("无效用户 ID：%w", err))
+	ctx := context.Background()
+	if action == "list" {
+		r.showToolPermissions(c, ctx, targetID)
 		return
 	}
-	toolName := args[2]
-	switch args[0] {
+	if err = requireArgs(args, 3, "/toolperm <allow|deny|reset> <user-id> <tool-name>"); err != nil {
+		r.commandError(c, err)
+		return
+	}
+	toolName := strings.TrimSpace(args[2])
+	if toolName == "" {
+		r.commandError(c, fmt.Errorf("工具名不能为空"))
+		return
+	}
+	switch action {
 	case "allow":
 		err = r.chats.SetToolPermission(ctx, targetID, toolName, true)
 	case "deny":
 		err = r.chats.SetToolPermission(ctx, targetID, toolName, false)
 	case "reset":
 		err = r.chats.ResetToolPermission(ctx, targetID, toolName)
-	default:
-		err = fmt.Errorf("未知工具权限操作 %q", args[0])
 	}
 	if err != nil {
 		r.commandError(c, err)
@@ -68,7 +67,7 @@ func (r *Runner) showToolPermissions(c telebot.Context, ctx context.Context, tar
 	names := r.tools.PermissionNames()
 	sort.Strings(names)
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("用户 %d 的工具权限：\n", targetID))
+	fmt.Fprintf(&builder, "用户 %d 的工具权限：\n", targetID)
 	for _, name := range names {
 		info, err := r.chats.ToolPermissionInfo(ctx, targetID, name)
 		if err != nil {
@@ -79,9 +78,9 @@ func (r *Runner) showToolPermissions(c telebot.Context, ctx context.Context, tar
 		if info.Allowed {
 			state = "允许"
 		}
-		defaultState := "允许"
-		if !info.Default {
-			defaultState = "禁止"
+		defaultState := "禁止"
+		if info.Default {
+			defaultState = "允许"
 		}
 		marker := ""
 		if info.Custom {

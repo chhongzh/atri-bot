@@ -161,6 +161,65 @@ func TestMCPOverridesRequireAdminAndStayPerUser(t *testing.T) {
 	}
 }
 
+func TestListFiltersAccountsForAdministratorViews(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := New(db, zap.NewNop(), 24)
+	if err = manager.Init(); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	for _, user := range []struct {
+		id       int64
+		username string
+	}{
+		{id: 1, username: "admin"},
+		{id: 2, username: "member"},
+		{id: 3, username: "banned"},
+	} {
+		if _, _, err = manager.EnsureUser(ctx, user.id, user.username, user.username); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = manager.SetBanned(ctx, 1, 3, true); err != nil {
+		t.Fatal(err)
+	}
+	if err = manager.SetAIAPIKey(ctx, 1, "must-not-be-loaded"); err != nil {
+		t.Fatal(err)
+	}
+
+	admins, err := manager.List(ctx, UserListFilter{Role: rolePointer(RoleAdmin)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(admins) != 1 || admins[0].TelegramID != 1 {
+		t.Fatalf("admin list = %#v, want only user 1", admins)
+	}
+	if admins[0].AIAPIKey != "" {
+		t.Fatal("account list must not load API keys")
+	}
+	banned, err := manager.List(ctx, UserListFilter{Banned: boolPointer(true)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(banned) != 1 || banned[0].TelegramID != 3 {
+		t.Fatalf("banned list = %#v, want only user 3", banned)
+	}
+	limited, err := manager.List(ctx, UserListFilter{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(limited) != 2 || limited[0].TelegramID != 1 || limited[1].TelegramID != 2 {
+		t.Fatalf("limited list = %#v, want users 1 and 2", limited)
+	}
+}
+
+func rolePointer(role Role) *Role { return &role }
+
+func boolPointer(value bool) *bool { return &value }
+
 func TestVerboseIsStoredPerUserAndDefaultsOff(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"))
 	if err != nil {

@@ -3,7 +3,9 @@ package chat
 import (
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
@@ -143,5 +145,24 @@ func TestUserStateRequeuesInterruptedInputsBeforeNewInputs(t *testing.T) {
 
 	if got, want := state.startTurnInputs(), []string{"开始任务", "补充参数"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("requeued inputs = %#v, want %#v", got, want)
+	}
+}
+
+func TestActiveUsersReturnsStableCredentialFreeStateSummaries(t *testing.T) {
+	now := time.Now()
+	manager := &Manager{states: map[int64]*UserState{
+		2: {UserID: 2, CharacterID: "second", MaxRounds: 12, CreatedAt: now, LastActiveAt: now},
+		1: {UserID: 1, CharacterID: "first", MaxRounds: 24, CreatedAt: now, LastActiveAt: now},
+	}, mu: sync.Mutex{}}
+
+	active := manager.ActiveUsers()
+	if len(active) != 2 {
+		t.Fatalf("active states = %#v, want two", active)
+	}
+	if active[0].UserID != 1 || active[1].UserID != 2 {
+		t.Fatalf("active state order = %#v, want users 1 then 2", active)
+	}
+	if active[0].CharacterID != "first" || active[0].MaxRounds != 24 {
+		t.Fatalf("first active state = %#v", active[0])
 	}
 }

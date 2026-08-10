@@ -222,6 +222,17 @@ func (m *Manager) SetAIMaxRounds(ctx context.Context, id int64, value int) error
 	return nil
 }
 
+func (m *Manager) SetVerbose(ctx context.Context, id int64, value bool) error {
+	result := m.db.WithContext(ctx).Model(&User{}).Where("telegram_id = ?", id).Update("verbose", value)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
 // SetMCPMaxTools sets a per-user override for the MCP provider limit.
 // A value of 0 restores the global default.
 func (m *Manager) SetMCPMaxTools(ctx context.Context, actorID, targetID int64, value int) error {
@@ -286,6 +297,27 @@ func (m *Manager) Admins(ctx context.Context) ([]User, error) {
 		Order("telegram_id ASC").
 		Find(&users).Error
 	return users, err
+}
+
+// List returns account identity and status fields for administrator views.
+func (m *Manager) List(ctx context.Context, filter UserListFilter) ([]User, error) {
+	query := m.db.WithContext(ctx).
+		Select("telegram_id", "username", "display_name", "role", "banned", "created_at", "updated_at").
+		Order("telegram_id ASC")
+	if filter.Role != nil {
+		query = query.Where("role = ?", *filter.Role)
+	}
+	if filter.Banned != nil {
+		query = query.Where("banned = ?", *filter.Banned)
+	}
+	if filter.Limit > 0 {
+		query = query.Limit(filter.Limit)
+	}
+	var users []User
+	if err := query.Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
 }
 
 func (m *Manager) Stats(ctx context.Context) (*Stats, error) {

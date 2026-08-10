@@ -2,6 +2,7 @@ package chat
 
 import (
 	"sync"
+	"time"
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
@@ -16,6 +17,8 @@ type UserState struct {
 	Runner         *adk.Runner
 	TurnLoop       *adk.TurnLoop[*Request, *schema.Message]
 	TelebotContext telebot.Context
+	CreatedAt      time.Time
+	LastActiveAt   time.Time
 
 	mu           sync.RWMutex
 	mcpClose     func()
@@ -23,6 +26,33 @@ type UserState struct {
 	activeInputs []string
 	closed       bool
 	stale        bool
+}
+
+// ActiveUser describes an in-memory chat state without exposing credentials.
+type ActiveUser struct {
+	UserID       int64
+	CharacterID  string
+	MaxRounds    int
+	CreatedAt    time.Time
+	LastActiveAt time.Time
+}
+
+func (s *UserState) touch() {
+	s.mu.Lock()
+	s.LastActiveAt = time.Now()
+	s.mu.Unlock()
+}
+
+func (s *UserState) activeUser() ActiveUser {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return ActiveUser{
+		UserID:       s.UserID,
+		CharacterID:  s.CharacterID,
+		MaxRounds:    s.MaxRounds,
+		CreatedAt:    s.CreatedAt,
+		LastActiveAt: s.LastActiveAt,
+	}
 }
 
 // agent returns the agent built for this state.

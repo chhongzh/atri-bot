@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -188,6 +189,26 @@ func (m *Manager) InvalidateAll() {
 	m.mu.Unlock()
 }
 
+// ActiveUsers returns the chat states currently retained in memory.
+// A retained state is available to serve a user until its TTL expires.
+func (m *Manager) ActiveUsers() []ActiveUser {
+	m.mu.Lock()
+	states := make([]*UserState, 0, len(m.states))
+	for _, state := range m.states {
+		states = append(states, state)
+	}
+	m.mu.Unlock()
+
+	users := make([]ActiveUser, 0, len(states))
+	for _, state := range states {
+		users = append(users, state.activeUser())
+	}
+	sort.Slice(users, func(i, j int) bool {
+		return users[i].UserID < users[j].UserID
+	})
+	return users
+}
+
 func (m *Manager) Shutdown() {
 	m.cancel()
 	m.mu.Lock()
@@ -215,6 +236,7 @@ func (m *Manager) state(ctx context.Context, userID int64, c telebot.Context) (*
 	if state := m.states[userID]; state != nil {
 		if !state.isStale() {
 			state.TelebotContext = c
+			state.touch()
 			m.mu.Unlock()
 			return state, nil
 		}
@@ -340,6 +362,8 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 		Agent:          agent,
 		Runner:         runner,
 		TelebotContext: c,
+		CreatedAt:      time.Now(),
+		LastActiveAt:   time.Now(),
 	}
 	if mcpResult != nil {
 		state.mcpClose = mcpResult.Close
