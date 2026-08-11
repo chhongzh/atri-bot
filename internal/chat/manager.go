@@ -17,7 +17,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/session"
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/chhongzh/atri-bot/internal/utils"
-	openai "github.com/cloudwego/eino-ext/components/model/openai"
+	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"

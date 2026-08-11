@@ -14,13 +14,13 @@ func (r *Runner) registerAdminCommands() error {
 	if err := r.commands.RegisterProvider("admin", "用户与运行状态管理（管理员）", true); err != nil {
 		return err
 	}
-	if err := r.commands.Register("admin", "列出所有管理员", "admins", "/admins", r.commandAdmins); err != nil {
+	if err := r.commands.Register("admin", "分页列出所有管理员", "admins", "/admins [page]", r.commandAdmins); err != nil {
 		return err
 	}
-	if err := r.commands.Register("admin", "列出用户账户", "users", "/users [all|banned]", r.commandUsers); err != nil {
+	if err := r.commands.Register("admin", "分页列出用户账户", "users", "/users [all|banned] [page]", r.commandUsers); err != nil {
 		return err
 	}
-	if err := r.commands.Register("admin", "列出活跃聊天状态", "active-users", "/active-users", r.commandActiveUsers); err != nil {
+	if err := r.commands.Register("admin", "分页列出活跃聊天状态", "active-users", "/active-users [page]", r.commandActiveUsers); err != nil {
 		return err
 	}
 	if err := r.commands.Register("admin", "查看用户详情", "user", "/user <user-id>", r.commandUser); err != nil {

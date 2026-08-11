@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,36 +12,50 @@ import (
 	"gopkg.in/telebot.v4"
 )
 
-const adminListLimit = 30
-const activeUserListLimit = 15
+const accountPageSize = 15
+const activeUserPageSize = 10
 
-func (r *Runner) commandAdmins(c telebot.Context, _ []string) {
-	role := account.RoleAdmin
-	r.listAccounts(c, context.Background(), account.UserListFilter{Role: &role}, "管理员")
-}
-
-func (r *Runner) commandUsers(c telebot.Context, args []string) {
-	filter, label, err := userListFilter(args)
+func (r *Runner) commandAdmins(c telebot.Context, args []string) {
+	page, err := parseOptionalPage(args, 0, "/admins [page]")
 	if err != nil {
 		r.commandError(c, err)
 		return
 	}
-	r.listAccounts(c, context.Background(), filter, label)
+	role := account.RoleAdmin
+	r.listAccounts(c, context.Background(), account.UserListFilter{Role: &role}, "管理员", page, "/admins")
 }
 
-func (r *Runner) commandActiveUsers(c telebot.Context, _ []string) {
+func (r *Runner) commandUsers(c telebot.Context, args []string) {
+	filter, label, page, pageCommand, err := userListRequest(args)
+	if err != nil {
+		r.commandError(c, err)
+		return
+	}
+	r.listAccounts(c, context.Background(), filter, label, page, pageCommand)
+}
+
+func (r *Runner) commandActiveUsers(c telebot.Context, args []string) {
+	page, err := parseOptionalPage(args, 0, "/active-users [page]")
+	if err != nil {
+		r.commandError(c, err)
+		return
+	}
 	ctx := context.Background()
 	activeUsers := r.chats.ActiveUsers()
 	if len(activeUsers) == 0 {
 		_ = r.sendSystemResultAndDelete(c, "当前没有活跃的聊天状态。")
 		return
 	}
+	pages := pageCount(len(activeUsers), activeUserPageSize)
+	if err := validatePage(page, pages); err != nil {
+		r.commandError(c, err)
+		return
+	}
+	start := (page - 1) * activeUserPageSize
+	end := min(start+activeUserPageSize, len(activeUsers))
 	var builder strings.Builder
-	fmt.Fprintf(&builder, "活跃聊天状态（共 %d 位，最多显示 %d 位）：\n", len(activeUsers), activeUserListLimit)
-	for index, active := range activeUsers {
-		if index >= activeUserListLimit {
-			break
-		}
+	fmt.Fprintf(&builder, "活跃聊天状态（第 %d/%d 页，共 %d 位）：\n", page, pages, len(activeUsers))
+	for _, active := range activeUsers[start:end] {
 		user, err := r.accounts.Get(ctx, active.UserID)
 		if err != nil {
 			r.commandError(c, err)
@@ -58,6 +73,7 @@ func (r *Runner) commandActiveUsers(c telebot.Context, _ []string) {
 			formatAccountTime(active.LastActiveAt),
 		)
 	}
+	writePageFooter(&builder, page, pages, "/active-users")
 	_ = r.sendSystemResultAndDelete(c, strings.TrimSpace(builder.String()))
 }
 
@@ -111,34 +127,76 @@ func (r *Runner) showAdminStats(c telebot.Context, ctx context.Context) {
 	))
 }
 
-func (r *Runner) listAccounts(c telebot.Context, ctx context.Context, filter account.UserListFilter, label string) {
-	filter.Limit = adminListLimit
-	users, err := r.accounts.List(ctx, filter)
+func (r *Runner) listAccounts(
+	c telebot.Context,
+	ctx context.Context,
+	filter account.UserListFilter,
+	label string,
+	page int,
+	pageCommand string,
+) {
+	result, err := r.accounts.ListPage(ctx, filter, page, accountPageSize)
 	if err != nil {
 		r.commandError(c, err)
 		return
 	}
-	if len(users) == 0 {
+	if result.Total == 0 {
 		_ = r.sendSystemResultAndDelete(c, "没有符合条件的"+label+"。")
 		return
 	}
+	if err = validatePage(page, result.Pages); err != nil {
+		r.commandError(c, err)
+		return
+	}
 	var builder strings.Builder
-	fmt.Fprintf(&builder, "%s（最多显示 %d 位）：\n", label, adminListLimit)
-	for _, user := range users {
+	fmt.Fprintf(&builder, "%s（第 %d/%d 页，共 %d 位）：\n", label, page, result.Pages, result.Total)
+	for _, user := range result.Users {
 		fmt.Fprintf(&builder, "- %s\n", formatAccountUser(user))
 	}
+	writePageFooter(&builder, page, result.Pages, pageCommand)
 	_ = r.sendSystemResultAndDelete(c, strings.TrimSpace(builder.String()))
 }
 
-func userListFilter(args []string) (account.UserListFilter, string, error) {
-	switch commandAction(args, "all") {
+func userListRequest(args []string) (account.UserListFilter, string, int, string, error) {
+	const usage = "/users [all|banned] [page]"
+	action := commandAction(args, "all")
+	pageIndex := 1
+	if _, err := strconv.Atoi(action); err == nil {
+		action = "all"
+		pageIndex = 0
+	}
+	page, err := parseOptionalPage(args, pageIndex, usage)
+	if err != nil {
+		return account.UserListFilter{}, "", 0, "", err
+	}
+	switch action {
 	case "all":
-		return account.UserListFilter{}, "用户", nil
+		return account.UserListFilter{}, "用户", page, "/users all", nil
 	case "banned":
 		banned := true
-		return account.UserListFilter{Banned: &banned}, "已封禁用户", nil
+		return account.UserListFilter{Banned: &banned}, "已封禁用户", page, "/users banned", nil
 	default:
-		return account.UserListFilter{}, "", fmt.Errorf("用法：/users [all|banned]")
+		return account.UserListFilter{}, "", 0, "", fmt.Errorf("用法：%s", usage)
+	}
+}
+
+func pageCount(total, pageSize int) int {
+	return (total + pageSize - 1) / pageSize
+}
+
+func validatePage(page, pages int) error {
+	if page > pages {
+		return fmt.Errorf("页码 %d 超出范围，共 %d 页", page, pages)
+	}
+	return nil
+}
+
+func writePageFooter(builder *strings.Builder, page, pages int, pageCommand string) {
+	if page < pages {
+		fmt.Fprintf(builder, "\n下一页：%s %d", pageCommand, page+1)
+	}
+	if page > 1 {
+		fmt.Fprintf(builder, "\n上一页：%s %d", pageCommand, page-1)
 	}
 }
 

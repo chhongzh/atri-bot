@@ -68,6 +68,20 @@ func parseUserID(args []string, index int, usage string) (int64, error) {
 	return userID, nil
 }
 
+func parseOptionalPage(args []string, index int, usage string) (int, error) {
+	if len(args) <= index {
+		return 1, nil
+	}
+	if len(args) != index+1 {
+		return 0, fmt.Errorf("用法：%s", usage)
+	}
+	page, err := strconv.Atoi(strings.TrimSpace(args[index]))
+	if err != nil || page <= 0 {
+		return 0, fmt.Errorf("页码必须是正整数")
+	}
+	return page, nil
+}
+
 func requiredValue(args []string, index int, usage string) (string, error) {
 	if err := requireArgs(args, index+1, usage); err != nil {
 		return "", err

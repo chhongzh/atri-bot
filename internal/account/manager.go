@@ -299,25 +299,39 @@ func (m *Manager) Admins(ctx context.Context) ([]User, error) {
 	return users, err
 }
 
-// List returns account identity and status fields for administrator views.
-func (m *Manager) List(ctx context.Context, filter UserListFilter) ([]User, error) {
+// ListPage returns account identity and status fields for administrator views.
+func (m *Manager) ListPage(ctx context.Context, filter UserListFilter, page, pageSize int) (*UserPage, error) {
+	if page <= 0 {
+		return nil, errors.New("page must be positive")
+	}
+	if pageSize <= 0 {
+		return nil, errors.New("page size must be positive")
+	}
 	query := m.db.WithContext(ctx).
-		Select("telegram_id", "username", "display_name", "role", "banned", "created_at", "updated_at").
-		Order("telegram_id ASC")
+		Model(&User{})
 	if filter.Role != nil {
 		query = query.Where("role = ?", *filter.Role)
 	}
 	if filter.Banned != nil {
 		query = query.Where("banned = ?", *filter.Banned)
 	}
-	if filter.Limit > 0 {
-		query = query.Limit(filter.Limit)
-	}
-	var users []User
-	if err := query.Find(&users).Error; err != nil {
+	result := &UserPage{Page: page}
+	if err := query.Count(&result.Total).Error; err != nil {
 		return nil, err
 	}
-	return users, nil
+	result.Pages = int((result.Total + int64(pageSize) - 1) / int64(pageSize))
+	if result.Total == 0 || page > result.Pages {
+		return result, nil
+	}
+	if err := query.
+		Select("telegram_id", "username", "display_name", "role", "banned", "created_at", "updated_at").
+		Order("telegram_id ASC").
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(&result.Users).Error; err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (m *Manager) Stats(ctx context.Context) (*Stats, error) {

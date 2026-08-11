@@ -41,5 +41,11 @@ type Stats struct {
 type UserListFilter struct {
 	Role   *Role
 	Banned *bool
-	Limit  int
+}
+
+type UserPage struct {
+	Users []User
+	Total int64
+	Page  int
+	Pages int
 }
