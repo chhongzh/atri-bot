@@ -93,7 +93,7 @@
 - 自然语言配置工具由 `internal/tools/builtin/config/` 提供，允许模型列出、读取和修改当前用户自己的工具配置。
 - MCP 相关工具由 `internal/tools/builtin/mcp/` 提供，配合 `internal/mcp/` 的 manager 使用；工具调用、provider 变更会触发对应聊天状态失效。
 - `RegisterBuiltin` 只用于不需要 manager 自动管理配置的工具，不要用它绕过可配置工具注册流程。
-- 新增配置字段时保证 JSON 标签稳定，拒绝未知字段，并补充默认配置、类型错误和用户隔离测试。
+- 新增配置字段时保证 JSON 标签稳定，拒绝未知字段；涉及持久化与用户隔离的行为补 DB 测试。
 - 工具配置更新需要记录用户 ID 和工具名，但不要记录配置正文或密钥。
 
 ## Command 约定
@@ -128,7 +128,7 @@
 - 所有 provider 的角色统一由 character manager 查询；重复角色 ID 按确定的 provider 加载顺序处理并记录警告。
 - 系统提示词只有一个模板：`internal/character/system.j2`，通过 `go:embed` 嵌入二进制。
 - 模板使用 Eino Jinja2 渲染，至少提供 `Time`、`Username`、`CharacterID`、`Character` 和 `CharacterYAML`。
-- system prompt 每轮动态生成；修改模板或注入字段时同时更新对应渲染测试。
+- system prompt 每轮动态生成；修改模板或注入字段时注意保持渲染输出正确。
 - provider 重载、单 provider 加载失败和重复角色必须有日志；单个 provider 失败不应无提示地污染其他 provider 结果。
 
 ## 配置约定
@@ -160,19 +160,21 @@ mcp:
 
 ## 测试与交付
 
-- 行为改动应在相邻包补充或更新测试；仓库已有测试时不要只依赖手工验证。
-- 优先先运行受影响包测试，再按风险扩展到全仓库。
+- 仅为涉及外部网络、数据库或并发逻辑的代码编写测试；其余内部实现与一眼可断言的逻辑不补测试，不为提高覆盖率而补测试。
+- 以下场景必须补充或更新测试：
+  - 外部网络：Telegram API 交互、MCP 远程加载、SMTP 等真实网络协议接入，以及内网地址拦截。
+  - 数据库：GORM 持久化、事务和用户隔离（account/session/tools/chat/mcp）。
+  - 并发：流式消息、抢占、异步加载与取消（chat TurnLoop、mcp worker 池）。
 - 推荐验证顺序：
 
 ```bash
 gofmt -w <changed-go-paths>
-go test ./...
-go test -race ./...
+go build ./...
 go vet ./...
-go mod verify
 git diff --check
 ```
 
+- 改动涉及上述需要测试的代码时，先运行受影响包测试；整仓 `go test ./...` 与 `go test -race ./...` 仅在改动测试或发布前运行。
 - 纯文档改动至少运行 `git diff --check`。
 - 不为了让测试通过而修改无关行为；遇到既有失败时记录其范围和证据。
 - 交付前检查数据库迁移兼容性、用户数据隔离、管理员不变量、状态失效路径和日志中是否泄漏敏感值。
