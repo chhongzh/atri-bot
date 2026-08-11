@@ -93,7 +93,7 @@
 - 自然语言配置工具由 `internal/tools/builtin/config/` 提供，允许模型列出、读取和修改当前用户自己的工具配置。
 - MCP 相关工具由 `internal/tools/builtin/mcp/` 提供，配合 `internal/mcp/` 的 manager 使用；工具调用、provider 变更会触发对应聊天状态失效。
 - `RegisterBuiltin` 只用于不需要 manager 自动管理配置的工具，不要用它绕过可配置工具注册流程。
-- 新增配置字段时保证 JSON 标签稳定，拒绝未知字段，并补充默认配置、类型错误和用户隔离测试。
+- 新增配置字段时保证 JSON 标签稳定，拒绝未知字段；涉及持久化与用户隔离的行为补 DB 测试。
 - 工具配置更新需要记录用户 ID 和工具名，但不要记录配置正文或密钥。
 
 ## Command 约定
@@ -128,7 +128,7 @@
 - 所有 provider 的角色统一由 character manager 查询；重复角色 ID 按确定的 provider 加载顺序处理并记录警告。
 - 系统提示词只有一个模板：`internal/character/system.j2`，通过 `go:embed` 嵌入二进制。
 - 模板使用 Eino Jinja2 渲染，至少提供 `Time`、`Username`、`CharacterID`、`Character` 和 `CharacterYAML`。
-- system prompt 每轮动态生成；修改模板或注入字段时同时更新对应渲染测试。
+- system prompt 每轮动态生成；修改模板或注入字段时注意保持渲染输出正确。
 - provider 重载、单 provider 加载失败和重复角色必须有日志；单个 provider 失败不应无提示地污染其他 provider 结果。
 
 ## 配置约定
@@ -160,12 +160,11 @@ mcp:
 
 ## 测试与交付
 
-- 本仓库大量函数为内部实现且逻辑直观，不为这类代码补测试；测试只覆盖真正有价值的部分。
+- 仅为涉及外部网络、数据库或并发逻辑的代码编写测试；其余内部实现与一眼可断言的逻辑不补测试，不为提高覆盖率而补测试。
 - 以下场景必须补充或更新测试：
-  - 复杂逻辑：状态流转、并发与抢占、DB 事务和用户隔离（chat/session/account/tools/mcp）。
-  - 外部边界：配置文件解析、Telegram API 交互、第三方协议接入（MCP 远程加载、SMTP 校验）。
-  - 安全与不变量：管理员不变量、权限判定、内网地址拦截、消息持久化规范化。
-- 以下场景不需要测试：纯字符串格式化、对第三方库的薄封装、一行分支判断、简单参数解析等一眼可断言的内部 helper；不为提高覆盖率而补测试。
+  - 外部网络：Telegram API 交互、MCP 远程加载、SMTP 等真实网络协议接入，以及内网地址拦截。
+  - 数据库：GORM 持久化、事务和用户隔离（account/session/tools/chat/mcp）。
+  - 并发：流式消息、抢占、异步加载与取消（chat TurnLoop、mcp worker 池）。
 - 推荐验证顺序：
 
 ```bash
