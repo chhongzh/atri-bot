@@ -74,9 +74,6 @@ func (m *Manager) Init() error {
 
 func (m *Manager) RegisterAll(registrars ...Registrar) error {
 	for _, registrar := range registrars {
-		if registrar == nil {
-			continue
-		}
 		if err := registrar(m); err != nil {
 			return err
 		}
@@ -91,9 +88,6 @@ func Register[C, I, O any](
 	function ConfiguredFunc[C, I, O],
 ) error {
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return fmt.Errorf("invalid tool name %q", name)
-	}
 	configType := reflect.TypeOf((*C)(nil)).Elem()
 	if configType.Kind() != reflect.Struct {
 		return fmt.Errorf("tool config %s must be a struct", configType)
@@ -153,25 +147,16 @@ func (m *Manager) RegisterBuiltin(name string, builtin tool.BaseTool) error {
 // must hide every related management tool as a group.
 func (m *Manager) RegisterBuiltinWithPermission(name, permission string, builtin tool.BaseTool) error {
 	permission = strings.TrimSpace(permission)
-	if permission == "" {
-		return errors.New("builtin tool permission is required")
-	}
 	return m.registerBuiltin(name, permission, builtin)
 }
 
 func (m *Manager) registerBuiltin(name, permission string, builtin tool.BaseTool) error {
 	name = strings.TrimSpace(name)
-	if name == "" || builtin == nil {
-		return fmt.Errorf("invalid builtin tool %q", name)
-	}
 	info, err := builtin.Info(context.Background())
 	if err != nil {
 		return fmt.Errorf("read builtin tool %q info: %w", name, err)
 	}
-	declaredName := ""
-	if info != nil {
-		declaredName = info.Name
-	}
+	declaredName := info.Name
 	if declaredName != name {
 		return fmt.Errorf("builtin tool name mismatch: registered %q, declared %q", name, declaredName)
 	}
@@ -207,9 +192,6 @@ func (m *Manager) registerBuiltin(name, permission string, builtin tool.BaseTool
 // callable tool.
 func (m *Manager) RegisterPermission(name string) error {
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return errors.New("tool permission name is required")
-	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, exists := m.virtualPermissions[name]; exists {
@@ -332,9 +314,6 @@ func (m *Manager) SetConfigValue(ctx context.Context, userID int64, name, path s
 	path, err := validateConfigPath(path)
 	if err != nil {
 		return nil, err
-	}
-	if value == nil {
-		return nil, errors.New("tool config value is required")
 	}
 	data, err := m.ConfigJSON(ctx, userID, name)
 	if err != nil {

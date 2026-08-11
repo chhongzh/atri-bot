@@ -18,9 +18,6 @@ func (r *Runner) registerAICommands() error {
 
 func (r *Runner) commandAI(c telebot.Context, args []string) {
 	sender := c.Sender()
-	if sender == nil {
-		return
-	}
 	ctx := context.Background()
 	action := commandAction(args, "show")
 	switch action {

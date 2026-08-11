@@ -3,7 +3,7 @@ package runner
 import (
 	"context"
 	_ "embed"
-	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/cloudwego/eino/components/prompt"
@@ -31,9 +31,6 @@ type adminMessageField struct {
 }
 
 func (r *Runner) sendAdminMessage(ctx context.Context, bot telebot.API, message adminMessage) {
-	if r.accounts == nil || bot == nil {
-		return
-	}
 	admins, err := r.accounts.Admins(ctx)
 	if err != nil {
 		r.logger.Error("failed to list administrators for notification", zap.Error(err))
@@ -77,16 +74,13 @@ func renderAdminMessage(ctx context.Context, message adminMessage) (string, erro
 	if err != nil {
 		return "", err
 	}
-	if len(messages) != 1 || messages[0] == nil {
-		return "", errors.New("administrator notification template returned no message")
+	if len(messages) != 1 {
+		return "", fmt.Errorf("administrator notification template returned %d messages", len(messages))
 	}
 	return strings.TrimSpace(messages[0].Content), nil
 }
 
 func formatErrorDetail(err error) string {
-	if err == nil {
-		return "未知错误"
-	}
 	return err.Error()
 }
 

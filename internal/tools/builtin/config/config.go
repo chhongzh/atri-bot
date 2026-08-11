@@ -40,10 +40,6 @@ type configureToolInput struct {
 }
 
 func Register(manager *toolmanager.Manager) error {
-	if manager == nil {
-		return errors.New("tool manager is nil")
-	}
-
 	listTool, err := toolutils.InferTool(
 		ListConfigurableToolsName,
 		"列举所有可以由当前用户单独配置的工具。",
@@ -87,6 +83,9 @@ func Register(manager *toolmanager.Manager) error {
 			state, ok := toolmanager.RunningStateFromContext(ctx)
 			if !ok {
 				return nil, toolmanager.ErrRunningStateMissing
+			}
+			if input.Value == nil {
+				return nil, errors.New("tool config value is required")
 			}
 			toolName, err := requiredToolName(input.ToolName)
 			if err != nil {

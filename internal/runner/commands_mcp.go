@@ -18,9 +18,6 @@ func (r *Runner) registerMCPCommands() error {
 
 func (r *Runner) commandMCP(c telebot.Context, args []string) {
 	sender := c.Sender()
-	if sender == nil {
-		return
-	}
 	action := commandAction(args, "")
 	if action == "" {
 		r.commandError(c, fmt.Errorf("用法：/mcp <show|limit|internal> <user-id> [value]"))

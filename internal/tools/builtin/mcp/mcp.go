@@ -76,13 +76,6 @@ type removeMCPProviderResult struct {
 // Register registers the MCP permission gate plus the natural language MCP
 // provider management tools.
 func Register(manager *toolmanager.Manager, mcpManager *mcpmanager.Manager) error {
-	if manager == nil {
-		return errors.New("tool manager is nil")
-	}
-	if mcpManager == nil {
-		return errors.New("mcp manager is nil")
-	}
-
 	if err := manager.RegisterPermission(GateToolName); err != nil {
 		return err
 	}
@@ -199,6 +192,9 @@ func Register(manager *toolmanager.Manager, mcpManager *mcpmanager.Manager) erro
 			state, ok := toolmanager.RunningStateFromContext(ctx)
 			if !ok {
 				return nil, toolmanager.ErrRunningStateMissing
+			}
+			if input.Value == nil {
+				return nil, errors.New("mcp provider value is required")
 			}
 			name, err := requiredProviderName(input.Name)
 			if err != nil {

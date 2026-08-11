@@ -60,10 +60,7 @@ func (t *auditTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 }
 
 func (t *auditTool) InvokableRun(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (string, error) {
-	toolName := ""
-	if t.info != nil {
-		toolName = t.info.Name
-	}
+	toolName := t.info.Name
 	t.logger.Info("mcp tool call started",
 		zap.Int64("user_id", t.userID),
 		zap.String("provider", t.providerName),

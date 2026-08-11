@@ -32,9 +32,6 @@ func (w *assistantStreamWriter) Seal() {
 func (w *assistantStreamWriter) Flush() error {
 	w.Seal()
 	for index, block := range w.blocks {
-		if w.send == nil {
-			continue
-		}
 		if err := w.send(block); err != nil {
 			w.blocks = w.blocks[index:]
 			return err

@@ -94,9 +94,6 @@ func (s *UserState) finishTurnInputs() []string {
 }
 
 func (s *UserState) requeueInputs(inputs []string) {
-	if len(inputs) == 0 {
-		return
-	}
 	s.mu.Lock()
 	s.queuedInputs = append(inputs, s.queuedInputs...)
 	s.mu.Unlock()
@@ -106,10 +103,8 @@ func (s *UserState) requeueInputs(inputs []string) {
 func (s *UserState) closeMCP() {
 	s.mu.Lock()
 	closer := s.mcpClose
-	s.mcpClose = nil
+	s.mcpClose = func() {}
 	s.closed = true
 	s.mu.Unlock()
-	if closer != nil {
-		closer()
-	}
+	closer()
 }

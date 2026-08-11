@@ -34,16 +34,14 @@ func (m *Manager) loadUserTools(
 	userID int64,
 	gate func(context.Context) (bool, error),
 ) (*LoadResult, error) {
-	if gate != nil {
-		allowed, err := gate(ctx)
-		if err != nil {
-			m.logger.Warn("mcp gate check failed", zap.Int64("user_id", userID), zap.Error(err))
-			return nil, err
-		}
-		if !allowed {
-			m.logger.Info("mcp loading skipped: permission denied", zap.Int64("user_id", userID))
-			return nil, nil
-		}
+	allowed, err := gate(ctx)
+	if err != nil {
+		m.logger.Warn("mcp gate check failed", zap.Int64("user_id", userID), zap.Error(err))
+		return nil, err
+	}
+	if !allowed {
+		m.logger.Info("mcp loading skipped: permission denied", zap.Int64("user_id", userID))
+		return &LoadResult{}, nil
 	}
 
 	providers, err := m.List(ctx, userID)
@@ -83,11 +81,8 @@ func (m *Manager) loadUserTools(
 			provider := &providers[index]
 			loaded, closeFn, loadErr := m.loadProvider(ctx, userID, provider, blockInternal)
 			if loadErr == nil && ctx.Err() != nil {
-				if closeFn != nil {
-					closeFn()
-				}
+				closeFn()
 				loaded = nil
-				closeFn = nil
 				loadErr = ctx.Err()
 			}
 			loadedProviders[index] = providerLoadResult{tools: loaded, close: closeFn, err: loadErr}
@@ -111,9 +106,7 @@ func (m *Manager) loadUserTools(
 			continue
 		}
 		loadResult.Tools = append(loadResult.Tools, loadedProviders[i].tools...)
-		if loadedProviders[i].close != nil {
-			loadResult.closers = append(loadResult.closers, loadedProviders[i].close)
-		}
+		loadResult.closers = append(loadResult.closers, loadedProviders[i].close)
 	}
 	if ctx.Err() != nil {
 		loadResult.Close()

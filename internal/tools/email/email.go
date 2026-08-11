@@ -83,9 +83,6 @@ func validateInput(input *input) error {
 }
 
 func validateConfig(cfg *config) (string, int, smtp.Auth, error) {
-	if cfg == nil {
-		return "", 0, nil, errors.New("邮件配置不能为空")
-	}
 	host := strings.TrimSpace(cfg.SmtpHost)
 	if host == "" {
 		return "", 0, nil, errors.New("smtpHost 不能为空")

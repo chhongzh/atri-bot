@@ -74,15 +74,9 @@ func (r *Runner) Start() {
 
 func (r *Runner) Stop() {
 	r.deleteAllSystemResults()
-	if r.chats != nil {
-		r.chats.Shutdown()
-	}
-	if r.mcp != nil {
-		r.mcp.Close()
-	}
-	if r.bot != nil {
-		r.bot.Stop()
-	}
+	r.chats.Shutdown()
+	r.mcp.Close()
+	r.bot.Stop()
 }
 
 func (r *Runner) DB() *gorm.DB {

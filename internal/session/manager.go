@@ -34,9 +34,6 @@ func (m *Manager) Load(ctx context.Context, userID int64, characterID string, ma
 	if err != nil {
 		return nil, err
 	}
-	if len(records) == 0 {
-		return nil, nil
-	}
 	messages := make([]*schema.Message, 0, len(records))
 	for _, record := range records {
 		var message *schema.Message
@@ -49,9 +46,6 @@ func (m *Manager) Load(ctx context.Context, userID int64, characterID string, ma
 }
 
 func (m *Manager) Append(ctx context.Context, userID int64, characterID string, maxRounds int, messages ...*schema.Message) error {
-	if len(messages) == 0 {
-		return nil
-	}
 	records, err := makeRecords(userID, characterID, messages)
 	if err != nil {
 		return err
@@ -102,14 +96,10 @@ func makeRecords(userID int64, characterID string, messages []*schema.Message) (
 		if err != nil {
 			return nil, fmt.Errorf("encode message %d: %w", index, err)
 		}
-		role := ""
-		if message != nil {
-			role = string(message.Role)
-		}
 		records = append(records, Record{
 			UserID:      userID,
 			CharacterID: characterID,
-			Role:        role,
+			Role:        string(message.Role),
 			Message:     string(data),
 		})
 	}
@@ -139,7 +129,7 @@ func trimStoredRounds(tx *gorm.DB, userID int64, characterID string, maxRounds i
 }
 
 func withoutLeadingSystem(messages []*schema.Message) []*schema.Message {
-	if len(messages) > 0 && messages[0] != nil && messages[0].Role == schema.System {
+	if len(messages) > 0 && messages[0].Role == schema.System {
 		return messages[1:]
 	}
 	return messages
@@ -152,7 +142,7 @@ func trimRounds(messages []*schema.Message, maxRounds int) []*schema.Message {
 	userCount := 0
 	start := 0
 	for index := len(messages) - 1; index >= 0; index-- {
-		if messages[index] == nil || messages[index].Role != schema.User {
+		if messages[index].Role != schema.User {
 			continue
 		}
 		userCount++

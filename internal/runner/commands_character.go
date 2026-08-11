@@ -37,9 +37,6 @@ func (r *Runner) commandCharacters(c telebot.Context, _ []string) {
 
 func (r *Runner) commandCharacter(c telebot.Context, args []string) {
 	sender := c.Sender()
-	if sender == nil {
-		return
-	}
 	ctx := context.Background()
 	if len(args) == 0 {
 		user, err := r.accounts.Get(ctx, sender.ID)
@@ -70,9 +67,6 @@ func (r *Runner) commandCharacter(c telebot.Context, args []string) {
 
 func (r *Runner) commandSessionClear(c telebot.Context, _ []string) {
 	sender := c.Sender()
-	if sender == nil {
-		return
-	}
 	ctx := context.Background()
 	user, err := r.accounts.Get(ctx, sender.ID)
 	if err != nil {

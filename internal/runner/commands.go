@@ -31,15 +31,10 @@ func (r *Runner) commandStart(c telebot.Context, _ []string) {
 }
 
 func (r *Runner) commandError(c telebot.Context, err error) {
-	if err == nil {
-		return
-	}
-	if c.Sender() != nil {
-		r.logger.Error("command failed",
-			zap.Int64("user_id", c.Sender().ID),
-			zap.Error(err),
-		)
-	}
+	r.logger.Error("command failed",
+		zap.Int64("user_id", c.Sender().ID),
+		zap.Error(err),
+	)
 	_ = r.sendSystemResultAndDelete(c, "操作失败："+err.Error())
 }
 

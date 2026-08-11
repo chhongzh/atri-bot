@@ -71,9 +71,6 @@ func (m *Manager) Init() error {
 // SetToolPermission sets a per-user override for a tool.
 func (m *Manager) SetToolPermission(ctx context.Context, userID int64, toolName string, allowed bool) error {
 	toolName = strings.TrimSpace(toolName)
-	if toolName == "" {
-		return errors.New("tool name is required")
-	}
 	if !m.tools.HasPermission(toolName) {
 		return fmt.Errorf("%w: %s", toolmanager.ErrToolNotFound, toolName)
 	}
@@ -92,9 +89,6 @@ func (m *Manager) SetToolPermission(ctx context.Context, userID int64, toolName 
 // ResetToolPermission removes a per-user override so the default applies again.
 func (m *Manager) ResetToolPermission(ctx context.Context, userID int64, toolName string) error {
 	toolName = strings.TrimSpace(toolName)
-	if toolName == "" {
-		return errors.New("tool name is required")
-	}
 	if !m.tools.HasPermission(toolName) {
 		return fmt.Errorf("%w: %s", toolmanager.ErrToolNotFound, toolName)
 	}
@@ -114,9 +108,6 @@ func (m *Manager) ResetToolPermission(ctx context.Context, userID int64, toolNam
 // the per-user override wins, otherwise the configured default applies.
 func (m *Manager) ToolPermissionInfo(ctx context.Context, userID int64, toolName string) (*ToolPermissionInfo, error) {
 	toolName = strings.TrimSpace(toolName)
-	if toolName == "" {
-		return nil, errors.New("tool name is required")
-	}
 	defaultAllowed, hasDefault := m.defaultToolPermissions[toolName]
 	if !hasDefault {
 		defaultAllowed = true

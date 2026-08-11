@@ -172,15 +172,11 @@ func (m *Manager) RenderSystemPrompt(ctx context.Context, id, username string, n
 	values["Character"] = character.Definition
 	values["CharacterYAML"] = string(definitionYAML)
 
-	template := m.template
-	if template == nil {
-		template = prompt.FromMessages(schema.Jinja2, schema.SystemMessage(systemTemplate))
-	}
-	messages, err := template.Format(ctx, values)
+	messages, err := m.template.Format(ctx, values)
 	if err != nil {
 		return "", err
 	}
-	if len(messages) != 1 || messages[0] == nil {
+	if len(messages) != 1 {
 		return "", errors.New("system prompt template returned no message")
 	}
 	return messages[0].Content, nil

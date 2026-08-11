@@ -2,7 +2,6 @@ package command
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -54,25 +53,16 @@ func New(authorizer Authorizer, start Handler, resultSender ResultSender) *Manag
 	}
 	_ = manager.RegisterProvider("basic", "基础命令", false)
 	_ = manager.Register("basic", "显示可用命令", "help", "/help", manager.help)
-	if start == nil {
-		start = func(telebot.Context, []string) {}
-	}
 	_ = manager.Register("basic", "开始使用机器人", "start", "/start", start)
 	return manager
 }
 
 func (m *Manager) sendResult(c telebot.Context, result string) error {
-	if m.resultSend != nil {
-		return m.resultSend(c, result)
-	}
-	return c.Send(result)
+	return m.resultSend(c, result)
 }
 
 func (m *Manager) RegisterProvider(name, description string, adminOnly bool) error {
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return errors.New("provider name cannot be empty")
-	}
 	if _, exists := m.providers.Get(name); exists {
 		return fmt.Errorf("command provider %q already exists", name)
 	}
@@ -91,12 +81,6 @@ func (m *Manager) Register(providerName, description, command, usage string, han
 		return fmt.Errorf("command provider %q not found", providerName)
 	}
 	command = strings.TrimPrefix(strings.TrimSpace(command), "/")
-	if command == "" || strings.ContainsAny(command, " \t\r\n") {
-		return fmt.Errorf("invalid command %q", command)
-	}
-	if handler == nil {
-		return fmt.Errorf("handler for %q is nil", command)
-	}
 	if _, exists := m.commands[command]; exists {
 		return fmt.Errorf("command %q already registered", command)
 	}
@@ -150,13 +134,7 @@ func (m *Manager) Dispatch(c telebot.Context, text string) (bool, error) {
 		return true, m.sendResult(c, "未知命令，使用 /help 查看可用命令。")
 	}
 	if registered.provider.AdminOnly {
-		if m.authorizer == nil {
-			return true, m.sendResult(c, "这个命令需要管理员权限。")
-		}
 		sender := c.Sender()
-		if sender == nil {
-			return true, nil
-		}
 		allowed, authErr := m.authorizer.IsAdmin(context.Background(), sender.ID)
 		if authErr != nil {
 			return true, authErr
@@ -170,13 +148,9 @@ func (m *Manager) Dispatch(c telebot.Context, text string) (bool, error) {
 }
 
 func (m *Manager) Help(ctx context.Context, userID int64) (string, error) {
-	isAdmin := false
-	if m.authorizer != nil {
-		var err error
-		isAdmin, err = m.authorizer.IsAdmin(ctx, userID)
-		if err != nil {
-			return "", err
-		}
+	isAdmin, err := m.authorizer.IsAdmin(ctx, userID)
+	if err != nil {
+		return "", err
 	}
 	var builder strings.Builder
 	builder.WriteString("可用命令\n")
@@ -202,9 +176,6 @@ func (m *Manager) Help(ctx context.Context, userID int64) (string, error) {
 
 func (m *Manager) help(c telebot.Context, _ []string) {
 	sender := c.Sender()
-	if sender == nil {
-		return
-	}
 	message, err := m.Help(context.Background(), sender.ID)
 	if err != nil {
 		_ = m.sendResult(c, "生成帮助信息失败："+err.Error())

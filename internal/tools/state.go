@@ -20,5 +20,5 @@ func WithRunningState(ctx context.Context, state *RunningState) context.Context 
 
 func RunningStateFromContext(ctx context.Context) (*RunningState, bool) {
 	state, ok := ctx.Value(runningStateKey{}).(*RunningState)
-	return state, ok && state != nil
+	return state, ok
 }

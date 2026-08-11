@@ -37,9 +37,6 @@ type LoadResult struct {
 }
 
 func (r *LoadResult) Close() {
-	if r == nil {
-		return
-	}
 	r.closeOnce.Do(func() {
 		for i := len(r.closers) - 1; i >= 0; i-- {
 			r.closers[i]()
@@ -78,6 +75,7 @@ func New(ctx context.Context, logger *zap.Logger, db *gorm.DB, accounts *account
 		cfg:      cfg,
 		ctx:      managerCtx,
 		cancel:   cancel,
+		onChange: func(int64) {},
 	}
 }
 
@@ -111,9 +109,7 @@ func (m *Manager) notifyChange(userID int64) {
 	m.onChangeMu.RLock()
 	handler := m.onChange
 	m.onChangeMu.RUnlock()
-	if handler != nil {
-		handler(userID)
-	}
+	handler(userID)
 }
 
 // Load loads one user's providers concurrently and returns only after every
@@ -141,20 +137,14 @@ func (m *Manager) Load(
 	}
 	result, err := m.loadUserTools(requestCtx, userID, gate)
 	stopCancel()
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		if result != nil {
-			result.Close()
-		}
-		cancel()
-		return nil, ctxErr
-	}
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-	if result == nil {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		result.Close()
 		cancel()
-		return nil, nil
+		return nil, ctxErr
 	}
 	result.closers = append(result.closers, cancel)
 	return result, nil

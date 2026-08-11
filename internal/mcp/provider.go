@@ -36,9 +36,6 @@ func (m *Manager) List(ctx context.Context, userID int64) ([]MCPProvider, error)
 
 func (m *Manager) Get(ctx context.Context, userID int64, name string) (*MCPProvider, error) {
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil, errors.New("mcp provider name is required")
-	}
 	var provider MCPProvider
 	err := m.db.WithContext(ctx).
 		Where("user_id = ? AND name = ?", userID, name).
@@ -51,9 +48,6 @@ func (m *Manager) Get(ctx context.Context, userID int64, name string) (*MCPProvi
 
 func (m *Manager) Add(ctx context.Context, userID int64, name, rawURL, meta, header string) (*MCPProvider, error) {
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil, errors.New("mcp provider name is required")
-	}
 	if len(name) > maxProviderNameBytes {
 		return nil, fmt.Errorf("mcp provider name exceeds %d bytes", maxProviderNameBytes)
 	}
@@ -112,9 +106,6 @@ func (m *Manager) Add(ctx context.Context, userID int64, name, rawURL, meta, hea
 
 func (m *Manager) Remove(ctx context.Context, userID int64, name string) error {
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return errors.New("mcp provider name is required")
-	}
 	m.providersMu.Lock()
 	result := m.db.WithContext(ctx).
 		Where("user_id = ? AND name = ?", userID, name).
@@ -155,9 +146,6 @@ func (m *Manager) SetValue(ctx context.Context, userID int64, name, path string,
 	path, err := validateProviderPath(path)
 	if err != nil {
 		return nil, err
-	}
-	if value == nil {
-		return nil, errors.New("mcp provider value is required")
 	}
 	if top := providerTopLevel(path); top != "url" && top != "meta" && top != "header" {
 		return nil, fmt.Errorf("%w: %s", ErrPathForbidden, top)

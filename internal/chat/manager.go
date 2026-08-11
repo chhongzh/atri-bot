@@ -93,9 +93,7 @@ func New(
 		cancel:                 cancel,
 		states:                 make(map[int64]*UserState),
 	}
-	if mcpManager != nil {
-		mcpManager.SetOnChange(manager.markStateStale)
-	}
+	mcpManager.SetOnChange(manager.markStateStale)
 	return manager
 }
 
@@ -112,10 +110,6 @@ func (m *Manager) markStateStale(userID int64) {
 
 func (m *Manager) Chat(ctx context.Context, c telebot.Context, text string) error {
 	sender := c.Sender()
-	if sender == nil {
-		return errors.New("telegram sender is missing")
-	}
-
 	request := newRequest(c, text)
 	for attempt := 0; attempt < 2; attempt++ {
 		state, err := m.state(ctx, sender.ID, c)
@@ -273,13 +267,11 @@ func (m *Manager) state(ctx context.Context, userID int64, c telebot.Context) (*
 
 func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context) (*UserState, error) {
 	startedAt := time.Now()
-	if m.cfg.SendLoadingResult != nil {
-		if err := m.cfg.SendLoadingResult(c, "正在加载聊天状态，请稍候。"); err != nil {
-			m.logger.Warn("failed to send chat state loading message",
-				zap.Int64("user_id", userID),
-				zap.Error(err),
-			)
-		}
+	if err := m.cfg.SendLoadingResult(c, "正在加载聊天状态，请稍候。"); err != nil {
+		m.logger.Warn("failed to send chat state loading message",
+			zap.Int64("user_id", userID),
+			zap.Error(err),
+		)
 	}
 
 	user, err := m.accounts.Get(ctx, userID)
@@ -322,36 +314,28 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 	if err != nil {
 		return nil, err
 	}
-	var mcpResult *mcpmanager.LoadResult
-	if m.mcp != nil {
-		mcpResult, err = m.mcp.Load(ctx, userID, func(ctx context.Context) (bool, error) {
-			return m.ToolAllowed(ctx, userID, "mcp")
-		})
-		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, mcpmanager.ErrLoaderClosed) {
-				return nil, err
-			}
-			m.logger.Warn("mcp loading failed",
-				zap.Int64("user_id", userID),
-				zap.Error(err),
-			)
-			mcpResult = nil
+	mcpResult, err := m.mcp.Load(ctx, userID, func(ctx context.Context) (bool, error) {
+		return m.ToolAllowed(ctx, userID, "mcp")
+	})
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, mcpmanager.ErrLoaderClosed) {
+			return nil, err
 		}
+		m.logger.Warn("mcp loading failed",
+			zap.Int64("user_id", userID),
+			zap.Error(err),
+		)
+		mcpResult = &mcpmanager.LoadResult{}
 	}
 	var mcpTools []tool.BaseTool
-	if mcpResult != nil {
-		if len(mcpResult.Tools) == 0 {
-			mcpResult.Close()
-			mcpResult = nil
-		} else {
-			mcpTools = mcpResult.Tools
-		}
+	if len(mcpResult.Tools) == 0 {
+		mcpResult.Close()
+	} else {
+		mcpTools = mcpResult.Tools
 	}
 	agent, err := m.buildAgent(ctx, chatModel, userID, mcpTools)
 	if err != nil {
-		if mcpResult != nil {
-			mcpResult.Close()
-		}
+		mcpResult.Close()
 		return nil, err
 	}
 	runner := adk.NewRunner(ctx, adk.RunnerConfig{Agent: agent, EnableStreaming: true})
@@ -365,9 +349,7 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 		CreatedAt:      time.Now(),
 		LastActiveAt:   time.Now(),
 	}
-	if mcpResult != nil {
-		state.mcpClose = mcpResult.Close
-	}
+	state.mcpClose = mcpResult.Close
 	state.TurnLoop = adk.NewTurnLoop(adk.TurnLoopConfig[*Request, *schema.Message]{
 		GenInput: func(turnCtx context.Context, _ *adk.TurnLoop[*Request, *schema.Message], items []*Request) (*adk.GenInputResult[*Request, *schema.Message], error) {
 			return m.genInput(turnCtx, state, items)
@@ -414,16 +396,10 @@ func (m *Manager) buildAgent(
 }
 
 func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Request) (*adk.GenInputResult[*Request, *schema.Message], error) {
-	if len(items) == 0 {
-		return nil, errors.New("turn loop received no chat requests")
-	}
 	interruptedInputs := state.startTurnInputs()
 	latest := items[len(items)-1]
 	sender := latest.Context.Sender()
-	username := ""
-	if sender != nil {
-		username = firstNonEmpty(sender.Username, strings.TrimSpace(sender.FirstName+" "+sender.LastName))
-	}
+	username := firstNonEmpty(sender.Username, strings.TrimSpace(sender.FirstName+" "+sender.LastName))
 	systemPrompt, err := m.characters.RenderSystemPrompt(ctx, state.CharacterID, username, time.Now())
 	if err != nil {
 		return nil, err
@@ -475,9 +451,7 @@ func (m *Manager) onAgentEvents(
 		if err := utils.SendTelegramText(latest.Context, text); err != nil {
 			return err
 		}
-		if m.cfg.OnMessageSent != nil {
-			m.cfg.OnMessageSent(latest.Context)
-		}
+		m.cfg.OnMessageSent(latest.Context)
 		return nil
 	})
 	for {
@@ -516,9 +490,6 @@ func (m *Manager) onAgentEvents(
 				turnErr = err
 			}
 			break
-		}
-		if message == nil {
-			continue
 		}
 		if message.Role == "" {
 			message.Role = variant.Role
@@ -599,9 +570,6 @@ func consumeMessageVariant(
 	variant *adk.MessageVariant,
 	handleChunk func(*schema.Message) error,
 ) (*schema.Message, error) {
-	if variant == nil {
-		return nil, nil
-	}
 	if !variant.IsStreaming {
 		message, err := variant.GetMessage()
 		if err != nil || message == nil {

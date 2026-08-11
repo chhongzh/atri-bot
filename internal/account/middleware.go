@@ -10,9 +10,6 @@ import (
 func (m *Manager) UserMiddleware(next telebot.HandlerFunc) telebot.HandlerFunc {
 	return func(c telebot.Context) error {
 		sender := c.Sender()
-		if sender == nil {
-			return nil
-		}
 		user, _, err := m.EnsureUser(context.Background(), sender.ID, sender.Username, displayName(sender))
 		if err != nil {
 			return err
@@ -27,9 +24,6 @@ func (m *Manager) UserMiddleware(next telebot.HandlerFunc) telebot.HandlerFunc {
 func (m *Manager) AdminOnly(next telebot.HandlerFunc) telebot.HandlerFunc {
 	return func(c telebot.Context) error {
 		sender := c.Sender()
-		if sender == nil {
-			return nil
-		}
 		ok, err := m.IsAdmin(context.Background(), sender.ID)
 		if err != nil {
 			return err

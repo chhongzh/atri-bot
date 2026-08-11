@@ -266,18 +266,13 @@ func TestLoadHonoursGate(t *testing.T) {
 	loadedResult, loadedErr := manager.Load(context.Background(), 7, func(context.Context) (bool, error) {
 		return true, nil
 	})
-	if deniedResult != nil {
-		t.Fatalf("denied result = %#v, want nil", deniedResult)
-	}
 	if deniedErr != nil {
 		t.Fatalf("denied err = %v", deniedErr)
 	}
 	if loadedErr != nil {
 		t.Fatalf("loaded err = %v", loadedErr)
 	}
-	if loadedResult == nil {
-		t.Fatal("loaded result is nil")
-	}
+	defer deniedResult.Close()
 	defer loadedResult.Close()
 	if len(loadedResult.Tools) != 0 {
 		t.Fatalf("loaded tools = %d, want 0", len(loadedResult.Tools))

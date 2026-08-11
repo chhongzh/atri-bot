@@ -62,18 +62,20 @@ func (r *Runner) handlerForUnsupportedMedia(telebot.Context) error {
 }
 
 func (r *Runner) handlerForError(err error, c telebot.Context) {
-	fields := []zap.Field{zap.Error(err)}
-	if c != nil && c.Sender() != nil {
-		fields = append(fields,
-			zap.Int64("user_id", c.Sender().ID),
-			zap.String("username", c.Sender().Username),
-		)
+	if err == nil {
+		err = errors.New("未知错误")
 	}
-	r.logger.Error("failed to handle telegram update", fields...)
-
+	fields := []zap.Field{zap.Error(err)}
 	if c == nil || c.Sender() == nil {
+		r.logger.Error("failed to handle telegram update", fields...)
 		return
 	}
+	fields = append(fields,
+		zap.Int64("user_id", c.Sender().ID),
+		zap.String("username", c.Sender().Username),
+	)
+	r.logger.Error("failed to handle telegram update", fields...)
+
 	r.sendAdminMessage(context.Background(), c.Bot(), adminMessage{
 		Title:    "错误通知",
 		Category: "消息处理错误",

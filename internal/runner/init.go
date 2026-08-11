@@ -2,7 +2,6 @@ package runner
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 
@@ -19,15 +18,6 @@ import (
 )
 
 func (r *Runner) Init(ctx context.Context) error {
-	if r.logger == nil {
-		return errors.New("runner logger is nil")
-	}
-	if r.cfg == nil {
-		return errors.New("runner config is nil")
-	}
-	if r.db == nil {
-		return errors.New("runner database is nil")
-	}
 	if err := r.normalizeConfig(); err != nil {
 		return err
 	}
@@ -86,7 +76,7 @@ func (r *Runner) Init(ctx context.Context) error {
 		return err
 	}
 
-	r.bot.Use(r.middlewareForLogging, r.middlewareForSystemResultCleanup, r.accounts.UserMiddleware)
+	r.bot.Use(r.middlewareForSender, r.middlewareForLogging, r.middlewareForSystemResultCleanup, r.accounts.UserMiddleware)
 	r.bot.Handle(telebot.OnText, r.handlerForText)
 	for _, endpoint := range []string{
 		telebot.OnMedia,

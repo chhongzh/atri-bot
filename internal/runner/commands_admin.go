@@ -37,9 +37,6 @@ func (r *Runner) registerAdminCommands() error {
 
 func (r *Runner) commandAdmin(c telebot.Context, args []string) {
 	sender := c.Sender()
-	if sender == nil {
-		return
-	}
 	action := commandAction(args, "stats")
 	switch action {
 	case "stats":

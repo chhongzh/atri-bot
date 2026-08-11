@@ -37,10 +37,6 @@ func (r *Runner) sendTemporaryResult(c telebot.Context, result string, deleteSou
 }
 
 func (r *Runner) setSystemResultDelete(user *telebot.User, deleteFunc func()) {
-	if user == nil || deleteFunc == nil {
-		return
-	}
-
 	r.systemResultMu.Lock()
 	previous := r.systemResultDeletes[user.ID]
 	if r.stopping {
@@ -57,10 +53,6 @@ func (r *Runner) setSystemResultDelete(user *telebot.User, deleteFunc func()) {
 }
 
 func (r *Runner) deleteSystemResult(user *telebot.User) {
-	if user == nil {
-		return
-	}
-
 	r.systemResultMu.Lock()
 	deleteFunc := r.systemResultDeletes[user.ID]
 	delete(r.systemResultDeletes, user.ID)
@@ -72,9 +64,7 @@ func (r *Runner) deleteSystemResult(user *telebot.User) {
 }
 
 func (r *Runner) onMessageSent(c telebot.Context) {
-	if c != nil {
-		r.deleteSystemResult(c.Sender())
-	}
+	r.deleteSystemResult(c.Sender())
 }
 
 func (r *Runner) deleteAllSystemResults() {
