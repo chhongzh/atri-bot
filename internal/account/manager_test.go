@@ -161,6 +161,83 @@ func TestMCPOverridesRequireAdminAndStayPerUser(t *testing.T) {
 	}
 }
 
+func TestListPageFiltersAndPaginatesAdministratorViews(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := New(db, zap.NewNop(), 24)
+	if err = manager.Init(); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	for _, user := range []struct {
+		id       int64
+		username string
+	}{
+		{id: 1, username: "admin"},
+		{id: 2, username: "member"},
+		{id: 3, username: "banned"},
+	} {
+		if _, _, err = manager.EnsureUser(ctx, user.id, user.username, user.username); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = manager.SetBanned(ctx, 1, 3, true); err != nil {
+		t.Fatal(err)
+	}
+	if err = manager.SetAIAPIKey(ctx, 1, "must-not-be-loaded"); err != nil {
+		t.Fatal(err)
+	}
+
+	adminRole := RoleAdmin
+	admins, err := manager.ListPage(ctx, UserListFilter{Role: &adminRole}, 1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(admins.Users) != 1 || admins.Users[0].TelegramID != 1 || admins.Total != 1 || admins.Pages != 1 {
+		t.Fatalf("admin list = %#v, want only user 1", admins)
+	}
+	if admins.Users[0].AIAPIKey != "" {
+		t.Fatal("account list must not load API keys")
+	}
+	isBanned := true
+	banned, err := manager.ListPage(ctx, UserListFilter{Banned: &isBanned}, 1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(banned.Users) != 1 || banned.Users[0].TelegramID != 3 || banned.Total != 1 {
+		t.Fatalf("banned list = %#v, want only user 3", banned)
+	}
+	firstPage, err := manager.ListPage(ctx, UserListFilter{}, 1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(firstPage.Users) != 2 || firstPage.Users[0].TelegramID != 1 || firstPage.Users[1].TelegramID != 2 || firstPage.Total != 3 || firstPage.Pages != 2 {
+		t.Fatalf("first page = %#v, want users 1 and 2 of 3", firstPage)
+	}
+	secondPage, err := manager.ListPage(ctx, UserListFilter{}, 2, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(secondPage.Users) != 1 || secondPage.Users[0].TelegramID != 3 || secondPage.Page != 2 {
+		t.Fatalf("second page = %#v, want user 3", secondPage)
+	}
+	outOfRange, err := manager.ListPage(ctx, UserListFilter{}, 3, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(outOfRange.Users) != 0 || outOfRange.Total != 3 || outOfRange.Pages != 2 {
+		t.Fatalf("out-of-range page = %#v", outOfRange)
+	}
+	if _, err = manager.ListPage(ctx, UserListFilter{}, 0, 2); err == nil {
+		t.Fatal("zero page must fail")
+	}
+	if _, err = manager.ListPage(ctx, UserListFilter{}, 1, 0); err == nil {
+		t.Fatal("zero page size must fail")
+	}
+}
+
 func TestVerboseIsStoredPerUserAndDefaultsOff(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"))
 	if err != nil {

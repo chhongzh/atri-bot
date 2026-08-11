@@ -29,8 +29,8 @@ func (r *Runner) commandCharacters(c telebot.Context, _ []string) {
 	}
 	var builder strings.Builder
 	builder.WriteString("可用角色：\n")
-	for _, item := range characters {
-		fmt.Fprintf(&builder, "- %s — %s (%s)\n", item.ID, item.Name(), item.ProviderID)
+	for _, character := range characters {
+		fmt.Fprintf(&builder, "- %s — %s（%s）\n", character.ID, character.Name(), character.ProviderID)
 	}
 	_ = r.sendSystemResultAndDelete(c, strings.TrimSpace(builder.String()))
 }
@@ -54,7 +54,8 @@ func (r *Runner) commandCharacter(c telebot.Context, args []string) {
 		_ = r.sendSystemResultAndDelete(c, "当前角色："+user.CharacterID)
 		return
 	}
-	characterID := args[0]
+
+	characterID := strings.TrimSpace(args[0])
 	if _, ok := r.characters.Get(characterID); !ok {
 		r.commandError(c, fmt.Errorf("角色 %q 不存在", characterID))
 		return

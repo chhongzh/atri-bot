@@ -2,6 +2,8 @@ package runner
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
@@ -41,9 +43,59 @@ func (r *Runner) commandError(c telebot.Context, err error) {
 	_ = r.sendSystemResultAndDelete(c, "操作失败："+err.Error())
 }
 
+func commandAction(args []string, defaultAction string) string {
+	if len(args) == 0 {
+		return defaultAction
+	}
+	return strings.ToLower(strings.TrimSpace(args[0]))
+}
+
 func requireArgs(args []string, count int, usage string) error {
 	if len(args) < count {
 		return fmt.Errorf("用法：%s", usage)
 	}
 	return nil
+}
+
+func parseUserID(args []string, index int, usage string) (int64, error) {
+	if err := requireArgs(args, index+1, usage); err != nil {
+		return 0, err
+	}
+	userID, err := strconv.ParseInt(strings.TrimSpace(args[index]), 10, 64)
+	if err != nil || userID <= 0 {
+		return 0, fmt.Errorf("用户 ID 必须是正整数")
+	}
+	return userID, nil
+}
+
+func parseOptionalPage(args []string, index int, usage string) (int, error) {
+	if len(args) <= index {
+		return 1, nil
+	}
+	if len(args) != index+1 {
+		return 0, fmt.Errorf("用法：%s", usage)
+	}
+	page, err := strconv.Atoi(strings.TrimSpace(args[index]))
+	if err != nil || page <= 0 {
+		return 0, fmt.Errorf("页码必须是正整数")
+	}
+	return page, nil
+}
+
+func requiredValue(args []string, index int, usage string) (string, error) {
+	if err := requireArgs(args, index+1, usage); err != nil {
+		return "", err
+	}
+	value := strings.TrimSpace(strings.Join(args[index:], " "))
+	if value == "" {
+		return "", fmt.Errorf("用法：%s", usage)
+	}
+	return value, nil
+}
+
+func optionalArg(args []string, index int) string {
+	if index >= len(args) {
+		return ""
+	}
+	return strings.TrimSpace(args[index])
 }

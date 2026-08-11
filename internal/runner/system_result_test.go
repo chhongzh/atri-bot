@@ -4,8 +4,21 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/chhongzh/atri-bot/internal/account"
 	"gopkg.in/telebot.v4"
 )
+
+func TestFormatAccountUserStartsWithClickableUsername(t *testing.T) {
+	formatted := formatAccountUser(account.User{
+		TelegramID:  42,
+		Username:    "atri_user",
+		DisplayName: "Atri",
+		Role:        account.RoleAdmin,
+	})
+	if formatted != "@atri_user（Atri） — 42（管理员）" {
+		t.Fatalf("formatted user = %q", formatted)
+	}
+}
 
 func TestCommandResultDeletesWhenUserSendsNewMessage(t *testing.T) {
 	runner := New(nil, nil, nil)

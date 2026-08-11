@@ -222,6 +222,17 @@ func (m *Manager) SetAIMaxRounds(ctx context.Context, id int64, value int) error
 	return nil
 }
 
+func (m *Manager) SetVerbose(ctx context.Context, id int64, value bool) error {
+	result := m.db.WithContext(ctx).Model(&User{}).Where("telegram_id = ?", id).Update("verbose", value)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
 // SetMCPMaxTools sets a per-user override for the MCP provider limit.
 // A value of 0 restores the global default.
 func (m *Manager) SetMCPMaxTools(ctx context.Context, actorID, targetID int64, value int) error {
@@ -286,6 +297,41 @@ func (m *Manager) Admins(ctx context.Context) ([]User, error) {
 		Order("telegram_id ASC").
 		Find(&users).Error
 	return users, err
+}
+
+// ListPage returns account identity and status fields for administrator views.
+func (m *Manager) ListPage(ctx context.Context, filter UserListFilter, page, pageSize int) (*UserPage, error) {
+	if page <= 0 {
+		return nil, errors.New("page must be positive")
+	}
+	if pageSize <= 0 {
+		return nil, errors.New("page size must be positive")
+	}
+	query := m.db.WithContext(ctx).
+		Model(&User{})
+	if filter.Role != nil {
+		query = query.Where("role = ?", *filter.Role)
+	}
+	if filter.Banned != nil {
+		query = query.Where("banned = ?", *filter.Banned)
+	}
+	result := &UserPage{Page: page}
+	if err := query.Count(&result.Total).Error; err != nil {
+		return nil, err
+	}
+	result.Pages = int((result.Total + int64(pageSize) - 1) / int64(pageSize))
+	if result.Total == 0 || page > result.Pages {
+		return result, nil
+	}
+	if err := query.
+		Select("telegram_id", "username", "display_name", "role", "banned", "created_at", "updated_at").
+		Order("telegram_id ASC").
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(&result.Users).Error; err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (m *Manager) Stats(ctx context.Context) (*Stats, error) {
