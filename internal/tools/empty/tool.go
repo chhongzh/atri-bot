@@ -1,4 +1,5 @@
-package hotspot
+// Package empty 提供了一个空的tool的代码模板
+package empty
 
 import (
 	"context"
@@ -15,13 +16,13 @@ type input struct {
 type result struct {
 }
 
-func mailTool(ctx context.Context, cfg *config, input *input) (*result, error) {
+func tool(ctx context.Context, cfg *config, input *input) (*result, error) {
 	return &result{}, nil
 }
 
 func Register(manager *toolmanager.Manager) error {
-	return toolmanager.Register(manager, "send_mail", "发送邮件", config{},
+	return toolmanager.Register(manager, "tool", "tool desc", config{},
 		func(ctx context.Context, _ *toolmanager.RunningState, cfg *config, input *input) (*result, error) {
-			return mailTool(ctx, cfg, input)
+			return tool(ctx, cfg, input)
 		})
 }
