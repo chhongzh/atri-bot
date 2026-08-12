@@ -1,8 +1,12 @@
 package character
 
-import "context"
+import (
+	"context"
+
+	"github.com/chhongzh/atri-bot/internal/model"
+)
 
 type Provider interface {
 	ID() string
-	Load(context.Context) ([]*Character, error)
+	Load(context.Context) ([]*model.Character, error)
 }

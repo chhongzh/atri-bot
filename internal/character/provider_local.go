@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/model"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,7 +25,7 @@ func (p *LocalProvider) ID() string {
 	return p.id
 }
 
-func (p *LocalProvider) Load(_ context.Context) ([]*Character, error) {
+func (p *LocalProvider) Load(_ context.Context) ([]*model.Character, error) {
 	entries, err := os.ReadDir(p.root)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -34,7 +35,7 @@ func (p *LocalProvider) Load(_ context.Context) ([]*Character, error) {
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 
-	characters := make([]*Character, 0, len(entries))
+	characters := make([]*model.Character, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -53,7 +54,7 @@ func (p *LocalProvider) Load(_ context.Context) ([]*Character, error) {
 			return nil, fmt.Errorf("parse character %s: %w", path, unmarshalErr)
 		}
 		id := strings.TrimSuffix(entry.Name(), extension)
-		characters = append(characters, &Character{
+		characters = append(characters, &model.Character{
 			ID:         id,
 			ProviderID: p.id,
 			Definition: definition,

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/cloudwego/eino/schema"
 	"gorm.io/gorm"
 )
@@ -21,11 +22,11 @@ func New(db *gorm.DB) *Manager {
 }
 
 func (m *Manager) Init() error {
-	return m.db.AutoMigrate(&Record{})
+	return m.db.AutoMigrate(&model.Record{})
 }
 
 func (m *Manager) Load(ctx context.Context, userID int64, characterID string, maxRounds int) ([]*schema.Message, error) {
-	var records []Record
+	var records []model.Record
 	err := m.db.WithContext(ctx).
 		Where("user_id = ? AND character_id = ?", userID, characterID).
 		Order("created_at ASC").
@@ -66,7 +67,7 @@ func (m *Manager) Save(ctx context.Context, userID int64, characterID string, ma
 		return err
 	}
 	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err = tx.Where("user_id = ? AND character_id = ?", userID, characterID).Delete(&Record{}).Error; err != nil {
+		if err = tx.Where("user_id = ? AND character_id = ?", userID, characterID).Delete(&model.Record{}).Error; err != nil {
 			return err
 		}
 		if len(records) == 0 {
@@ -86,17 +87,17 @@ func normalizeMaxRounds(maxRounds int) int {
 func (m *Manager) Clear(ctx context.Context, userID int64, characterID string) error {
 	return m.db.WithContext(ctx).
 		Where("user_id = ? AND character_id = ?", userID, characterID).
-		Delete(&Record{}).Error
+		Delete(&model.Record{}).Error
 }
 
-func makeRecords(userID int64, characterID string, messages []*schema.Message) ([]Record, error) {
-	records := make([]Record, 0, len(messages))
+func makeRecords(userID int64, characterID string, messages []*schema.Message) ([]model.Record, error) {
+	records := make([]model.Record, 0, len(messages))
 	for index, message := range messages {
 		data, err := json.Marshal(message)
 		if err != nil {
 			return nil, fmt.Errorf("encode message %d: %w", index, err)
 		}
-		records = append(records, Record{
+		records = append(records, model.Record{
 			UserID:      userID,
 			CharacterID: characterID,
 			Role:        string(message.Role),
@@ -110,7 +111,7 @@ func trimStoredRounds(tx *gorm.DB, userID int64, characterID string, maxRounds i
 	if maxRounds <= 0 {
 		return nil
 	}
-	var cutoff Record
+	var cutoff model.Record
 	err := tx.Select("id", "created_at").
 		Where("user_id = ? AND character_id = ? AND role = ?", userID, characterID, schema.User).
 		Order("created_at DESC").
@@ -125,7 +126,7 @@ func trimStoredRounds(tx *gorm.DB, userID int64, characterID string, maxRounds i
 	}
 	return tx.Where("user_id = ? AND character_id = ?", userID, characterID).
 		Where("created_at < ? OR (created_at = ? AND id < ?)", cutoff.CreatedAt, cutoff.CreatedAt, cutoff.ID).
-		Delete(&Record{}).Error
+		Delete(&model.Record{}).Error
 }
 
 func withoutLeadingSystem(messages []*schema.Message) []*schema.Message {

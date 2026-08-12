@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chhongzh/atri-bot/internal/model"
 	einomcp "github.com/cloudwego/eino-ext/components/tool/mcp"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/mark3labs/mcp-go/client"
@@ -124,7 +125,7 @@ func (m *Manager) loadUserTools(
 func (m *Manager) loadProvider(
 	ctx context.Context,
 	userID int64,
-	provider *MCPProvider,
+	provider *model.MCPProvider,
 	blockInternal bool,
 ) ([]tool.BaseTool, func(), error) {
 	connectCtx, cancel := context.WithTimeout(ctx, connectTimeout)
@@ -198,7 +199,7 @@ func (m *Manager) loadProviderWithTransport(
 	ctx context.Context,
 	connectCtx context.Context,
 	userID int64,
-	provider *MCPProvider,
+	provider *model.MCPProvider,
 	headers map[string]string,
 	meta *mcpprotocol.Meta,
 	blockInternal bool,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/chhongzh/atri-bot/internal/account"
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -50,7 +51,7 @@ func TestAddListGetRemoveWithUserIsolation(t *testing.T) {
 	if added.URL != "https://weather.example/sse" {
 		t.Fatalf("url = %q", added.URL)
 	}
-	if _, err = manager.Add(ctx, 1, "weather", "https://other.example/sse", "", ""); !errors.Is(err, ErrProviderExists) {
+	if _, err = manager.Add(ctx, 1, "weather", "https://other.example/sse", "", ""); !errors.Is(err, errs.ErrProviderExists) {
 		t.Fatalf("duplicate add error = %v, want ErrProviderExists", err)
 	}
 	if _, err = manager.Add(ctx, 2, "weather", "https://other.example/sse", "", ""); err != nil {
@@ -74,7 +75,7 @@ func TestAddListGetRemoveWithUserIsolation(t *testing.T) {
 	if err = manager.Remove(ctx, 1, "weather"); err != nil {
 		t.Fatal(err)
 	}
-	if err = manager.Remove(ctx, 1, "weather"); !errors.Is(err, ErrProviderNotFound) {
+	if err = manager.Remove(ctx, 1, "weather"); !errors.Is(err, errs.ErrProviderNotFound) {
 		t.Fatalf("second remove error = %v, want ErrProviderNotFound", err)
 	}
 }
@@ -90,14 +91,14 @@ func TestAddValidatesURLAndJSON(t *testing.T) {
 		header  string
 		wantErr error
 	}{
-		{name: "internal suffix", url: "http://service.internal/sse", wantErr: ErrInternalHostBlocked},
-		{name: "localhost", url: "http://localhost:8080/sse", wantErr: ErrInternalHostBlocked},
-		{name: "loopback ip", url: "http://127.0.0.1:12345/sse", wantErr: ErrInternalHostBlocked},
-		{name: "private ip", url: "http://192.168.1.10/sse", wantErr: ErrInternalHostBlocked},
-		{name: "non-http scheme", url: "ftp://example.com/sse", wantErr: ErrInvalidScheme},
-		{name: "bad json meta", url: "https://example.com/sse", meta: "not-json", wantErr: ErrInvalidJSON},
-		{name: "array header", url: "https://example.com/sse", header: `["a"]`, wantErr: ErrInvalidJSON},
-		{name: "header injection", url: "https://example.com/sse", header: "{\"Authorization\":\"secret\\r\\nInjected: true\"}", wantErr: ErrInvalidJSON},
+		{name: "internal suffix", url: "http://service.internal/sse", wantErr: errs.ErrInternalHostBlocked},
+		{name: "localhost", url: "http://localhost:8080/sse", wantErr: errs.ErrInternalHostBlocked},
+		{name: "loopback ip", url: "http://127.0.0.1:12345/sse", wantErr: errs.ErrInternalHostBlocked},
+		{name: "private ip", url: "http://192.168.1.10/sse", wantErr: errs.ErrInternalHostBlocked},
+		{name: "non-http scheme", url: "ftp://example.com/sse", wantErr: errs.ErrInvalidScheme},
+		{name: "bad json meta", url: "https://example.com/sse", meta: "not-json", wantErr: errs.ErrInvalidJSON},
+		{name: "array header", url: "https://example.com/sse", header: `["a"]`, wantErr: errs.ErrInvalidJSON},
+		{name: "header injection", url: "https://example.com/sse", header: "{\"Authorization\":\"secret\\r\\nInjected: true\"}", wantErr: errs.ErrInvalidJSON},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -124,7 +125,7 @@ func TestAddEnforcesProviderLimit(t *testing.T) {
 	if _, err := manager.Add(ctx, 1, "b", "https://b.example/sse", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := manager.Add(ctx, 1, "c", "https://c.example/sse", "", ""); !errors.Is(err, ErrProviderLimit) {
+	if _, err := manager.Add(ctx, 1, "c", "https://c.example/sse", "", ""); !errors.Is(err, errs.ErrProviderLimit) {
 		t.Fatalf("third add error = %v, want ErrProviderLimit", err)
 	}
 
@@ -167,10 +168,10 @@ func TestValueAndSetValueViaJSONPath(t *testing.T) {
 		t.Fatalf("header after update = %#v", value)
 	}
 
-	if _, err = manager.SetValue(ctx, 7, "git", "header.Authorization", 42); !errors.Is(err, ErrInvalidJSON) {
+	if _, err = manager.SetValue(ctx, 7, "git", "header.Authorization", 42); !errors.Is(err, errs.ErrInvalidJSON) {
 		t.Fatalf("non-string header error = %v, want ErrInvalidJSON", err)
 	}
-	if _, err = manager.SetValue(ctx, 7, "git", "name", "renamed"); !errors.Is(err, ErrPathForbidden) {
+	if _, err = manager.SetValue(ctx, 7, "git", "name", "renamed"); !errors.Is(err, errs.ErrPathForbidden) {
 		t.Fatalf("name update error = %v, want ErrPathForbidden", err)
 	}
 	if value, err = manager.SetValue(ctx, 7, "git", "meta.missing", 1); err != nil || value != float64(1) {
@@ -194,7 +195,7 @@ func TestSetValueRevalidatesURL(t *testing.T) {
 	if _, err := manager.Add(ctx, 7, "git", "https://example.com/sse", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := manager.SetValue(ctx, 7, "git", "url", "http://localhost:8080/sse"); !errors.Is(err, ErrInternalHostBlocked) {
+	if _, err := manager.SetValue(ctx, 7, "git", "url", "http://localhost:8080/sse"); !errors.Is(err, errs.ErrInternalHostBlocked) {
 		t.Fatalf("internal url update error = %v, want ErrInternalHostBlocked", err)
 	}
 	value, err := manager.Value(ctx, 7, "git", "url")
@@ -251,7 +252,7 @@ func TestLoadCanBeCanceledWithChatState(t *testing.T) {
 func TestLoadRejectsClosedLoader(t *testing.T) {
 	manager, _ := newTestManager(t, Config{})
 	manager.Close()
-	if _, err := manager.Load(context.Background(), 7, nil); !errors.Is(err, ErrLoaderClosed) {
+	if _, err := manager.Load(context.Background(), 7, nil); !errors.Is(err, errs.ErrLoaderClosed) {
 		t.Fatalf("Load error = %v, want ErrLoaderClosed", err)
 	}
 }

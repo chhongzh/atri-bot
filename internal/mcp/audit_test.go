@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 	"go.uber.org/zap"
@@ -26,7 +27,7 @@ func (f *fakeMCPTool) InvokableRun(_ context.Context, arguments string, _ ...too
 }
 
 func TestAuditToolWrapsInvocation(t *testing.T) {
-	provider := &MCPProvider{Name: "p1", URL: "https://example.com/sse"}
+	provider := &model.MCPProvider{Name: "p1", URL: "https://example.com/sse"}
 	wrapped := wrapAuditTool(zap.NewNop(), 1, provider, &fakeMCPTool{})
 	invokable, ok := wrapped.(tool.InvokableTool)
 	if !ok {

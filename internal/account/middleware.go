@@ -2,15 +2,15 @@ package account
 
 import (
 	"context"
-	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/utils"
 	"gopkg.in/telebot.v4"
 )
 
 func (m *Manager) UserMiddleware(next telebot.HandlerFunc) telebot.HandlerFunc {
 	return func(c telebot.Context) error {
 		sender := c.Sender()
-		user, _, err := m.EnsureUser(context.Background(), sender.ID, sender.Username, displayName(sender))
+		user, _, err := m.EnsureUser(context.Background(), sender.ID, sender.Username, utils.TelegramFormatUsername(sender))
 		if err != nil {
 			return err
 		}
@@ -33,8 +33,4 @@ func (m *Manager) AdminOnly(next telebot.HandlerFunc) telebot.HandlerFunc {
 		}
 		return next(c)
 	}
-}
-
-func displayName(user *telebot.User) string {
-	return strings.TrimSpace(strings.Join([]string{user.FirstName, user.LastName}, " "))
 }

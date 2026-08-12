@@ -9,11 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
-)
 
-var (
-	ErrInternalHostBlocked = errors.New("mcp url points to an internal or private network address")
-	ErrInvalidScheme       = errors.New("mcp url scheme must be http or https")
+	"github.com/chhongzh/atri-bot/internal/errs"
 )
 
 // validateProviderURL checks that rawURL is an absolute http(s) URL. When
@@ -29,7 +26,7 @@ func validateProviderURL(rawURL string, blockInternal bool) error {
 		return fmt.Errorf("invalid mcp url: %w", err)
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return ErrInvalidScheme
+		return errs.ErrInvalidScheme
 	}
 	if parsed.Hostname() == "" {
 		return errors.New("mcp url host is required")
@@ -48,7 +45,7 @@ func validateProviderURL(rawURL string, blockInternal bool) error {
 		return err
 	}
 	if internal {
-		return ErrInternalHostBlocked
+		return errs.ErrInternalHostBlocked
 	}
 	return nil
 }
@@ -70,7 +67,7 @@ func validateProviderURLContext(ctx context.Context, rawURL string, blockInterna
 	}
 	for _, address := range addresses {
 		if isPrivateIP(address.IP) {
-			return ErrInternalHostBlocked
+			return errs.ErrInternalHostBlocked
 		}
 	}
 	return nil
@@ -87,7 +84,7 @@ func newMCPHTTPClient(blockInternal bool) (*http.Client, func()) {
 				return nil, fmt.Errorf("parse mcp dial address: %w", err)
 			}
 			if internal, _ := isInternalHost(host); internal {
-				return nil, ErrInternalHostBlocked
+				return nil, errs.ErrInternalHostBlocked
 			}
 			addresses, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 			if err != nil {
@@ -95,7 +92,7 @@ func newMCPHTTPClient(blockInternal bool) (*http.Client, func()) {
 			}
 			for _, resolved := range addresses {
 				if isPrivateIP(resolved.IP) {
-					return nil, ErrInternalHostBlocked
+					return nil, errs.ErrInternalHostBlocked
 				}
 			}
 			if len(addresses) == 0 {

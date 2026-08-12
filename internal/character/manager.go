@@ -2,7 +2,6 @@ package character
 
 import (
 	"context"
-	"crypto/sha256"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -13,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chhongzh/atri-bot/internal/model"
+	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/cloudwego/eino/components/prompt"
 	"github.com/cloudwego/eino/schema"
 	"go.uber.org/zap"
@@ -39,7 +40,7 @@ type Manager struct {
 	cfg    Config
 
 	mu         sync.RWMutex
-	characters map[string]*Character
+	characters map[string]*model.Character
 	template   *prompt.DefaultChatTemplate
 }
 
@@ -48,19 +49,19 @@ func New(db *gorm.DB, logger *zap.Logger, cfg Config) *Manager {
 		db:         db,
 		logger:     logger,
 		cfg:        cfg,
-		characters: make(map[string]*Character),
+		characters: make(map[string]*model.Character),
 		template:   prompt.FromMessages(schema.Jinja2, schema.SystemMessage(systemTemplate)),
 	}
 }
 
 func (m *Manager) Init(ctx context.Context) error {
-	if err := m.db.AutoMigrate(&ProviderRecord{}); err != nil {
+	if err := m.db.AutoMigrate(&model.ProviderRecord{}); err != nil {
 		return err
 	}
 	localRoot := filepath.Join(m.cfg.CWD, "chardefs")
-	local := ProviderRecord{
+	local := model.ProviderRecord{
 		ID:      localProviderID,
-		Kind:    ProviderLocal,
+		Kind:    model.ProviderLocal,
 		Path:    localRoot,
 		BuiltIn: true,
 		Enabled: true,
@@ -69,12 +70,12 @@ func (m *Manager) Init(ctx context.Context) error {
 		return err
 	}
 	if strings.TrimSpace(m.cfg.RemoteURL) != "" {
-		remote := ProviderRecord{
+		remote := model.ProviderRecord{
 			ID:      "remote-default",
-			Kind:    ProviderRemote,
-			URL:     normalizeGitURL(m.cfg.RemoteURL),
+			Kind:    model.ProviderRemote,
+			URL:     utils.GitNormalizeRepoURL(m.cfg.RemoteURL),
 			Branch:  m.cfg.RemoteBranch,
-			Path:    providerPath(m.cfg.CWD, "remote-default", m.cfg.RemoteURL, m.cfg.RemoteBranch),
+			Path:    utils.ProviderGetPath(m.cfg.CWD, "remote-default", m.cfg.RemoteURL, m.cfg.RemoteBranch),
 			BuiltIn: true,
 			Enabled: true,
 		}
@@ -90,7 +91,7 @@ func (m *Manager) Reload(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	loaded := make(map[string]*Character)
+	loaded := make(map[string]*model.Character)
 	for _, record := range records {
 		if !record.Enabled {
 			continue
@@ -123,9 +124,9 @@ func (m *Manager) Reload(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) List() []*Character {
+func (m *Manager) List() []*model.Character {
 	m.mu.RLock()
-	characters := make([]*Character, 0, len(m.characters))
+	characters := make([]*model.Character, 0, len(m.characters))
 	for _, character := range m.characters {
 		characters = append(characters, character)
 	}
@@ -134,23 +135,19 @@ func (m *Manager) List() []*Character {
 	return characters
 }
 
-func (m *Manager) Get(id string) (*Character, bool) {
+func (m *Manager) Get(id string) (*model.Character, bool) {
 	m.mu.RLock()
 	character, ok := m.characters[id]
 	m.mu.RUnlock()
 	return character, ok
 }
 
-func (m *Manager) Default() (*Character, bool) {
+func (m *Manager) Default() (*model.Character, bool) {
 	characters := m.List()
 	if len(characters) == 0 {
 		return nil, false
 	}
 	return characters[0], true
-}
-
-func (m *Manager) Template() string {
-	return systemTemplate
 }
 
 func (m *Manager) RenderSystemPrompt(ctx context.Context, id, username string, now time.Time) (string, error) {
@@ -182,8 +179,8 @@ func (m *Manager) RenderSystemPrompt(ctx context.Context, id, username string, n
 	return messages[0].Content, nil
 }
 
-func (m *Manager) Providers(ctx context.Context) ([]ProviderRecord, error) {
-	var records []ProviderRecord
+func (m *Manager) Providers(ctx context.Context) ([]model.ProviderRecord, error) {
+	var records []model.ProviderRecord
 	err := m.db.WithContext(ctx).
 		Order("built_in DESC").
 		Order("created_at ASC").
@@ -196,16 +193,16 @@ func (m *Manager) AddRemote(ctx context.Context, id, url, branch string) error {
 	if id == "" || id == localProviderID || !providerIDPattern.MatchString(id) || strings.Contains(id, "..") {
 		return errors.New("invalid provider id")
 	}
-	url = normalizeGitURL(url)
+	url = utils.GitNormalizeRepoURL(url)
 	if url == "" {
 		return errors.New("remote url cannot be empty")
 	}
-	record := ProviderRecord{
+	record := model.ProviderRecord{
 		ID:      id,
-		Kind:    ProviderRemote,
+		Kind:    model.ProviderRemote,
 		URL:     url,
 		Branch:  branch,
-		Path:    providerPath(m.cfg.CWD, id, url, branch),
+		Path:    utils.ProviderGetPath(m.cfg.CWD, id, url, branch),
 		Enabled: true,
 	}
 	if err := m.db.WithContext(ctx).Create(&record).Error; err != nil {
@@ -215,21 +212,21 @@ func (m *Manager) AddRemote(ctx context.Context, id, url, branch string) error {
 }
 
 func (m *Manager) UpdateRemote(ctx context.Context, id, url, branch string) error {
-	var record ProviderRecord
+	var record model.ProviderRecord
 	if err := m.db.WithContext(ctx).First(&record, "id = ?", id).Error; err != nil {
 		return err
 	}
-	if record.Kind != ProviderRemote {
+	if record.Kind != model.ProviderRemote {
 		return errors.New("only remote providers can be updated")
 	}
-	url = normalizeGitURL(url)
+	url = utils.GitNormalizeRepoURL(url)
 	if url == "" {
 		return errors.New("remote url cannot be empty")
 	}
 	updates := map[string]any{
 		"url":    url,
 		"branch": strings.TrimSpace(branch),
-		"path":   providerPath(m.cfg.CWD, id, url, branch),
+		"path":   utils.ProviderGetPath(m.cfg.CWD, id, url, branch),
 	}
 	if err := m.db.WithContext(ctx).Model(&record).Updates(updates).Error; err != nil {
 		return err
@@ -237,14 +234,8 @@ func (m *Manager) UpdateRemote(ctx context.Context, id, url, branch string) erro
 	return m.Reload(ctx)
 }
 
-func providerPath(cwd, id, url, branch string) string {
-	digest := sha256.Sum256([]byte(normalizeGitURL(url) + "\x00" + strings.TrimSpace(branch)))
-	directory := fmt.Sprintf("%s-%x", id, digest[:6])
-	return filepath.Join(cwd, "data", "character-providers", directory)
-}
-
 func (m *Manager) Remove(ctx context.Context, id string) error {
-	var record ProviderRecord
+	var record model.ProviderRecord
 	if err := m.db.WithContext(ctx).First(&record, "id = ?", id).Error; err != nil {
 		return err
 	}
@@ -257,11 +248,11 @@ func (m *Manager) Remove(ctx context.Context, id string) error {
 	return m.Reload(ctx)
 }
 
-func providerFromRecord(record ProviderRecord) (Provider, error) {
+func providerFromRecord(record model.ProviderRecord) (Provider, error) {
 	switch record.Kind {
-	case ProviderLocal:
+	case model.ProviderLocal:
 		return NewLocalProvider(record.ID, record.Path), nil
-	case ProviderRemote:
+	case model.ProviderRemote:
 		if record.URL == "" {
 			return nil, errors.New("remote url is empty")
 		}

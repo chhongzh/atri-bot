@@ -20,8 +20,7 @@ type User struct {
 	AIBaseURL   string
 	AIAPIKey    string
 	AIModel     string
-	AIMaxRounds int  `gorm:"not null;default:36"`
-	Verbose     bool `gorm:"not null;default:false"`
+	AIMaxRounds int `gorm:"not null;default:36"`
 
 	MCPMaxTools      int `gorm:"not null;default:0"`
 	MCPBlockInternal *bool

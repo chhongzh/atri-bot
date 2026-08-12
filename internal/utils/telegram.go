@@ -9,8 +9,8 @@ import (
 
 const telegramTextLimit = 4096
 
-func SendTelegramText(c telebot.Context, text string) error {
-	for _, part := range SplitTelegramText(text, telegramTextLimit) {
+func TelegramSendText(c telebot.Context, text string) error {
+	for _, part := range TelegramSplitText(text, telegramTextLimit) {
 		if err := c.Send(part); err != nil {
 			return err
 		}
@@ -18,19 +18,19 @@ func SendTelegramText(c telebot.Context, text string) error {
 	return nil
 }
 
-func SplitTelegramText(text string, limit int) []string {
+func TelegramSplitText(text string, limit int) []string {
 	blocks := strings.Split(text, "\n\n")
 	parts := make([]string, 0, len(blocks))
 	for _, block := range blocks {
 		if block == "" {
 			continue
 		}
-		parts = append(parts, splitTelegramTextBlock(block, limit)...)
+		parts = append(parts, telegramSplitTextBlock(block, limit)...)
 	}
 	return parts
 }
 
-func splitTelegramTextBlock(text string, limit int) []string {
+func telegramSplitTextBlock(text string, limit int) []string {
 	if limit <= 0 || utf8.RuneCountInString(text) <= limit {
 		return []string{text}
 	}
@@ -47,4 +47,8 @@ func splitTelegramTextBlock(text string, limit int) []string {
 		runes = runes[end:]
 	}
 	return parts
+}
+
+func TelegramFormatUsername(user *telebot.User) string {
+	return strings.TrimSpace(strings.Join([]string{user.FirstName, user.LastName}, " "))
 }

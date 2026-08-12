@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/chhongzh/atri-bot/internal/chat"
 	"github.com/chhongzh/atri-bot/internal/command"
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 )
@@ -33,7 +33,7 @@ func (r *Runner) handlerForText(c telebot.Context) error {
 	go r.maintainChatAction(ctx, c)
 
 	err := r.chats.Chat(ctx, c, text)
-	if errors.Is(err, chat.ErrAIConfigIncomplete) {
+	if errors.Is(err, errs.ErrAIConfigIncomplete) {
 		if err = c.Send("缺少 AI 配置，请先使用/ai配置你自己的 AI 连接"); err == nil {
 			r.onMessageSent(c)
 		}

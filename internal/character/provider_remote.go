@@ -5,8 +5,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/model"
+	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 )
@@ -19,14 +20,14 @@ type RemoteProvider struct {
 }
 
 func NewRemoteProvider(id, url, branch, root string) *RemoteProvider {
-	return &RemoteProvider{id: id, url: normalizeGitURL(url), branch: branch, root: root}
+	return &RemoteProvider{id: id, url: utils.GitNormalizeRepoURL(url), branch: branch, root: root}
 }
 
 func (p *RemoteProvider) ID() string {
 	return p.id
 }
 
-func (p *RemoteProvider) Load(ctx context.Context) ([]*Character, error) {
+func (p *RemoteProvider) Load(ctx context.Context) ([]*model.Character, error) {
 	if err := os.MkdirAll(filepath.Dir(p.root), 0o755); err != nil {
 		return nil, err
 	}
@@ -64,12 +65,4 @@ func (p *RemoteProvider) Load(ctx context.Context) ([]*Character, error) {
 		root = p.root
 	}
 	return NewLocalProvider(p.id, root).Load(ctx)
-}
-
-func normalizeGitURL(value string) string {
-	value = strings.TrimSpace(value)
-	if strings.HasPrefix(value, "github.com/") {
-		return "https://" + value
-	}
-	return value
 }

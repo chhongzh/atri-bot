@@ -2,26 +2,17 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/chhongzh/atri-bot/internal/account"
+	"github.com/chhongzh/atri-bot/internal/errs"
+	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/cloudwego/eino/components/tool"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 const DefaultMaxTools = 32
-
-var (
-	ErrProviderNotFound = errors.New("mcp provider not found")
-	ErrProviderExists   = errors.New("mcp provider already exists")
-	ErrProviderLimit    = errors.New("mcp provider limit reached")
-	ErrInvalidJSON      = errors.New("invalid mcp provider json field")
-	ErrPathNotFound     = errors.New("mcp provider path not found")
-	ErrPathForbidden    = errors.New("mcp provider path is read-only")
-	ErrLoaderClosed     = errors.New("mcp loader is closed")
-)
 
 type Config struct {
 	DefaultMaxTools int
@@ -80,7 +71,7 @@ func New(ctx context.Context, logger *zap.Logger, db *gorm.DB, accounts *account
 }
 
 func (m *Manager) Init() error {
-	return m.db.AutoMigrate(&MCPProvider{})
+	return m.db.AutoMigrate(&model.MCPProvider{})
 }
 
 // Close cancels active loads and waits for them to exit. It is safe to call
@@ -122,7 +113,7 @@ func (m *Manager) Load(
 	m.lifecycleMu.Lock()
 	if m.closed {
 		m.lifecycleMu.Unlock()
-		return nil, ErrLoaderClosed
+		return nil, errs.ErrLoaderClosed
 	}
 	requestCtx, cancel := context.WithCancel(m.ctx)
 	m.requestsWG.Add(1)

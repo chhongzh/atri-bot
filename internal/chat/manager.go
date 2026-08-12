@@ -12,6 +12,7 @@ import (
 
 	"github.com/chhongzh/atri-bot/internal/account"
 	"github.com/chhongzh/atri-bot/internal/character"
+	errs "github.com/chhongzh/atri-bot/internal/errs"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	"github.com/chhongzh/atri-bot/internal/msgops"
 	"github.com/chhongzh/atri-bot/internal/session"
@@ -25,13 +26,6 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 	"gorm.io/gorm"
-)
-
-var (
-	ErrNoCharacters       = errors.New("no characters are available")
-	ErrAIConfigIncomplete = errors.New("user AI config is incomplete")
-	ErrTurnPreempted      = errors.New("turn preempted by a newer message")
-	ErrStateStopped       = errors.New("user turn loop has stopped")
 )
 
 type Config struct {
@@ -123,7 +117,7 @@ func (m *Manager) Chat(ctx context.Context, c telebot.Context, text string) erro
 		if accepted {
 			select {
 			case err = <-request.done:
-				if errors.Is(err, ErrTurnPreempted) {
+				if errors.Is(err, errs.ErrTurnPreempted) {
 					return nil
 				}
 				return err
@@ -133,7 +127,7 @@ func (m *Manager) Chat(ctx context.Context, c telebot.Context, text string) erro
 		}
 		m.Invalidate(sender.ID)
 	}
-	return ErrStateStopped
+	return errs.ErrStateStopped
 }
 
 func (m *Manager) Invalidate(userID int64) {
@@ -282,7 +276,7 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 	if characterID == "" {
 		defaultCharacter, ok := m.characters.Default()
 		if !ok {
-			return nil, ErrNoCharacters
+			return nil, errs.ErrNoCharacters
 		}
 		characterID = defaultCharacter.ID
 		if err = m.accounts.SetCharacter(ctx, userID, characterID); err != nil {
@@ -303,7 +297,7 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 		missing = append(missing, "model")
 	}
 	if len(missing) > 0 {
-		return nil, fmt.Errorf("%w: missing %s", ErrAIConfigIncomplete, strings.Join(missing, ", "))
+		return nil, fmt.Errorf("%w: missing %s", errs.ErrAIConfigIncomplete, strings.Join(missing, ", "))
 	}
 	chatModel, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
 		BaseURL: strings.TrimSpace(user.AIBaseURL),
@@ -318,7 +312,7 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 		return m.ToolAllowed(ctx, userID, "mcp")
 	})
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, mcpmanager.ErrLoaderClosed) {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errs.ErrLoaderClosed) {
 			return nil, err
 		}
 		m.logger.Warn("mcp loading failed",
@@ -399,7 +393,7 @@ func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Reque
 	interruptedInputs := state.startTurnInputs()
 	latest := items[len(items)-1]
 	sender := latest.Context.Sender()
-	username := firstNonEmpty(sender.Username, strings.TrimSpace(sender.FirstName+" "+sender.LastName))
+	username := utils.StringsFindFirstNonEmpty(sender.Username, strings.TrimSpace(sender.FirstName+" "+sender.LastName))
 	systemPrompt, err := m.characters.RenderSystemPrompt(ctx, state.CharacterID, username, time.Now())
 	if err != nil {
 		return nil, err
@@ -447,8 +441,8 @@ func (m *Manager) onAgentEvents(
 		turnErr error
 	)
 	latest := turn.Consumed[len(turn.Consumed)-1]
-	streamWriter := newAssistantStreamWriter(func(text string) error {
-		if err := utils.SendTelegramText(latest.Context, text); err != nil {
+	streamWriter := utils.NewAssistantStreamWriter(func(text string) error {
+		if err := utils.TelegramSendText(latest.Context, text); err != nil {
 			return err
 		}
 		m.cfg.OnMessageSent(latest.Context)
@@ -506,7 +500,7 @@ func (m *Manager) onAgentEvents(
 	if stopped {
 		streamWriter.Discard()
 		state.finishTurnInputs()
-		completeRequests(turn.Consumed, ErrStateStopped)
+		completeRequests(turn.Consumed, errs.ErrStateStopped)
 		return nil
 	}
 	preempted := false
@@ -524,7 +518,7 @@ func (m *Manager) onAgentEvents(
 		interruptedInputs := state.finishTurnInputs()
 		interruptedInputs = append(interruptedInputs, requestTexts(turn.Consumed)...)
 		state.requeueInputs(interruptedInputs)
-		completeRequests(turn.Consumed, ErrTurnPreempted)
+		completeRequests(turn.Consumed, errs.ErrTurnPreempted)
 		m.logger.Debug("chat turn preempted",
 			zap.Int64("user_id", state.UserID),
 			zap.Int("queued_inputs", len(interruptedInputs)),
@@ -617,10 +611,10 @@ func (m *Manager) watchState(state *UserState) {
 		)
 	}
 	for _, request := range result.UnhandledItems {
-		request.complete(ErrStateStopped)
+		request.complete(errs.ErrStateStopped)
 	}
 	for _, request := range result.InterruptedItems {
-		request.complete(ErrStateStopped)
+		request.complete(errs.ErrStateStopped)
 	}
 	m.mu.Lock()
 	if m.states[state.UserID] == state {
@@ -642,13 +636,4 @@ func requestTexts(requests []*Request) []string {
 		texts = append(texts, request.Text)
 	}
 	return texts
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }

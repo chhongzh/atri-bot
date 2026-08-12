@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -77,11 +78,11 @@ func (m *Manager) EnsureUser(ctx context.Context, id int64, username, displayNam
 			role = RoleAdmin
 		}
 		user = User{
-			TelegramID:  id,
-			Username:    username,
-			DisplayName: displayName,
-			Role:        role,
-			AIMaxRounds: m.defaultMaxRounds,
+			TelegramID:                   id,
+			Username:                     username,
+			utils.TelegramFormatUsername: displayName,
+			Role:                         role,
+			AIMaxRounds:                  m.defaultMaxRounds,
 		}
 		return tx.Create(&user).Error
 	})
@@ -213,17 +214,6 @@ func (m *Manager) SetAIMaxRounds(ctx context.Context, id int64, value int) error
 		return errors.New("AI max rounds must be positive")
 	}
 	result := m.db.WithContext(ctx).Model(&User{}).Where("telegram_id = ?", id).Update("ai_max_rounds", value)
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return ErrUserNotFound
-	}
-	return nil
-}
-
-func (m *Manager) SetVerbose(ctx context.Context, id int64, value bool) error {
-	result := m.db.WithContext(ctx).Model(&User{}).Where("telegram_id = ?", id).Update("verbose", value)
 	if result.Error != nil {
 		return result.Error
 	}

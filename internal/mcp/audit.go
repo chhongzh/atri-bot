@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 	"go.uber.org/zap"
@@ -31,7 +32,7 @@ var invalidToolName = regexp.MustCompile(`[^A-Za-z0-9_-]+`)
 func wrapAuditTool(
 	logger *zap.Logger,
 	userID int64,
-	provider *MCPProvider,
+	provider *model.MCPProvider,
 	base tool.BaseTool,
 ) tool.BaseTool {
 	invokable, ok := base.(tool.InvokableTool)
@@ -94,7 +95,7 @@ func (t *auditTool) InvokableRun(ctx context.Context, argumentsInJSON string, op
 	return result, nil
 }
 
-func exposedToolName(provider *MCPProvider, remoteName string) string {
+func exposedToolName(provider *model.MCPProvider, remoteName string) string {
 	providerName := strings.Trim(invalidToolName.ReplaceAllString(provider.Name, "_"), "_")
 	remoteName = strings.Trim(invalidToolName.ReplaceAllString(remoteName, "_"), "_")
 	if providerName == "" {

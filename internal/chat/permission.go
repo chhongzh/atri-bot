@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
+	"github.com/chhongzh/atri-bot/internal/model"
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/cloudwego/eino/components/tool"
 	"go.uber.org/zap"
@@ -44,17 +44,6 @@ func normalizeDefaultToolPermissions(
 	return normalized
 }
 
-// ToolPermission records an individual user's permission for one tool.
-// When no record exists for a user, the configured default applies.
-type ToolPermission struct {
-	UserID   int64  `gorm:"primaryKey;autoIncrement:false"`
-	ToolName string `gorm:"primaryKey;size:255"`
-	Allowed  bool   `gorm:"not null"`
-
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
 // ToolPermissionInfo describes the effective permission for one tool.
 type ToolPermissionInfo struct {
 	ToolName string
@@ -65,7 +54,7 @@ type ToolPermissionInfo struct {
 
 // Init migrates the tool permission table.
 func (m *Manager) Init() error {
-	return m.db.AutoMigrate(&ToolPermission{})
+	return m.db.AutoMigrate(&model.ToolPermission{})
 }
 
 // SetToolPermission sets a per-user override for a tool.
@@ -74,7 +63,7 @@ func (m *Manager) SetToolPermission(ctx context.Context, userID int64, toolName 
 	if !m.tools.HasPermission(toolName) {
 		return fmt.Errorf("%w: %s", toolmanager.ErrToolNotFound, toolName)
 	}
-	record := ToolPermission{UserID: userID, ToolName: toolName, Allowed: allowed}
+	record := model.ToolPermission{UserID: userID, ToolName: toolName, Allowed: allowed}
 	if err := m.db.WithContext(ctx).Save(&record).Error; err != nil {
 		return err
 	}
@@ -94,7 +83,7 @@ func (m *Manager) ResetToolPermission(ctx context.Context, userID int64, toolNam
 	}
 	if err := m.db.WithContext(ctx).
 		Where("user_id = ? AND tool_name = ?", userID, toolName).
-		Delete(&ToolPermission{}).Error; err != nil {
+		Delete(&model.ToolPermission{}).Error; err != nil {
 		return err
 	}
 	m.logger.Info("reset tool permission",
@@ -112,7 +101,7 @@ func (m *Manager) ToolPermissionInfo(ctx context.Context, userID int64, toolName
 	if !hasDefault {
 		defaultAllowed = true
 	}
-	var record ToolPermission
+	var record model.ToolPermission
 	err := m.db.WithContext(ctx).
 		Where("user_id = ? AND tool_name = ?", userID, toolName).
 		First(&record).Error

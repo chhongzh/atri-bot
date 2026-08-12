@@ -1,8 +1,6 @@
-package character
+package model
 
-import (
-	"time"
-)
+import "time"
 
 type ProviderKind string
 
