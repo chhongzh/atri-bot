@@ -107,7 +107,7 @@ mcp:
 各项配置的含义如下。
 
 - `telegram.bot_token` 必填，机器人的 token。
-- `bot.max_rounds` 新用户的默认会话轮数，之后每个用户可以用 `/ai rounds` 单独改。
+- `bot.max_rounds` 新用户压缩会话历史前保留的完整 Telegram 轮数，之后每个用户可以用 `/ai rounds` 单独修改。一次 TurnLoop 从收到的一组 user 消息开始，包含其间所有 assistant、tool call 和 tool result，直到最终 assistant 回复结束，整体计为一轮。达到上限后会先阻塞新一轮，用该用户自己的模型生成带 cutoff 的 system history；原始轮次继续保留，后续加载只读取最新 system history 与 cutoff 之后的新轮次。
 - `atri_cwd` 数据和本地角色的根目录，默认当前目录。数据库 `atri-bot.db` 和远程角色缓存都放在这里。
 - `character_repository_url` 和 `character_repository_branch` 默认角色仓库和分支。
 - `mcp.max_tools` 每个用户可添加的 MCP provider 上限，默认 32。

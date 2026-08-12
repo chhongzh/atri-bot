@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -78,11 +77,11 @@ func (m *Manager) EnsureUser(ctx context.Context, id int64, username, displayNam
 			role = RoleAdmin
 		}
 		user = User{
-			TelegramID:                   id,
-			Username:                     username,
-			utils.TelegramFormatUsername: displayName,
-			Role:                         role,
-			AIMaxRounds:                  m.defaultMaxRounds,
+			TelegramID:  id,
+			Username:    username,
+			DisplayName: displayName,
+			Role:        role,
+			AIMaxRounds: m.defaultMaxRounds,
 		}
 		return tx.Create(&user).Error
 	})

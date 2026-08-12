@@ -33,7 +33,7 @@ func (r *Runner) Init(ctx context.Context) error {
 	if err := r.mcp.Init(); err != nil {
 		return err
 	}
-	r.sessions = session.New(r.db)
+	r.sessions = session.New(r.db, r.logger)
 	if err := r.sessions.Init(); err != nil {
 		return err
 	}

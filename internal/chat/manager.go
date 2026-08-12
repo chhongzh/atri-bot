@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"sort"
 	"strings"
 	"sync"
@@ -108,6 +107,9 @@ func (m *Manager) Chat(ctx context.Context, c telebot.Context, text string) erro
 	for attempt := 0; attempt < 2; attempt++ {
 		state, err := m.state(ctx, sender.ID, c)
 		if err != nil {
+			return err
+		}
+		if err = m.sessions.Wait(ctx, state.UserID, state.CharacterID); err != nil {
 			return err
 		}
 		accepted, _ := state.TurnLoop.Push(
@@ -327,22 +329,22 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 	} else {
 		mcpTools = mcpResult.Tools
 	}
+	state := &UserState{
+		UserID:         userID,
+		CharacterID:    characterID,
+		MaxRounds:      user.AIMaxRounds,
+		TelebotContext: c,
+		CreatedAt:      time.Now(),
+		LastActiveAt:   time.Now(),
+	}
 	agent, err := m.buildAgent(ctx, chatModel, userID, mcpTools)
 	if err != nil {
 		mcpResult.Close()
 		return nil, err
 	}
 	runner := adk.NewRunner(ctx, adk.RunnerConfig{Agent: agent, EnableStreaming: true})
-	state := &UserState{
-		UserID:         userID,
-		CharacterID:    characterID,
-		MaxRounds:      user.AIMaxRounds,
-		Agent:          agent,
-		Runner:         runner,
-		TelebotContext: c,
-		CreatedAt:      time.Now(),
-		LastActiveAt:   time.Now(),
-	}
+	state.Agent = agent
+	state.Runner = runner
 	state.mcpClose = mcpResult.Close
 	state.TurnLoop = adk.NewTurnLoop(adk.TurnLoopConfig[*Request, *schema.Message]{
 		GenInput: func(turnCtx context.Context, _ *adk.TurnLoop[*Request, *schema.Message], items []*Request) (*adk.GenInputResult[*Request, *schema.Message], error) {
@@ -398,7 +400,22 @@ func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Reque
 	if err != nil {
 		return nil, err
 	}
-	history, err := m.sessions.Load(ctx, state.UserID, state.CharacterID, state.MaxRounds)
+	runCtx := toolmanager.WithRunningState(ctx, &toolmanager.RunningState{
+		UserID:         state.UserID,
+		CharacterID:    state.CharacterID,
+		TelebotContext: latest.Context,
+	})
+	sessionCtx, cancelSession := context.WithTimeout(context.WithoutCancel(runCtx), m.cfg.ModelTimeout)
+	stopSession := context.AfterFunc(m.ctx, cancelSession)
+	defer func() {
+		stopSession()
+		cancelSession()
+	}()
+	history, err := m.sessions.Load(sessionCtx, state.UserID, state.CharacterID, session.CompressionOptions{
+		MaxRounds:    state.MaxRounds,
+		SystemPrompt: systemPrompt,
+		Agent:        state.agent(),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -411,11 +428,6 @@ func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Reque
 	for _, item := range items {
 		messages = append(messages, schema.UserMessage(item.Text))
 	}
-	runCtx := toolmanager.WithRunningState(ctx, &toolmanager.RunningState{
-		UserID:         state.UserID,
-		CharacterID:    state.CharacterID,
-		TelebotContext: latest.Context,
-	})
 	m.logger.Debug("prepared chat turn",
 		zap.Int64("user_id", state.UserID),
 		zap.String("character_id", state.CharacterID),
@@ -441,10 +453,18 @@ func (m *Manager) onAgentEvents(
 		turnErr error
 	)
 	latest := turn.Consumed[len(turn.Consumed)-1]
+	sentBlocks := 0
 	streamWriter := utils.NewAssistantStreamWriter(func(text string) error {
 		if err := utils.TelegramSendText(latest.Context, text); err != nil {
 			return err
 		}
+		sentBlocks++
+		m.logger.Debug("sent assistant stream block",
+			zap.Int64("user_id", state.UserID),
+			zap.String("character_id", state.CharacterID),
+			zap.Int("block", sentBlocks),
+			zap.Int("characters", len([]rune(text))),
+		)
 		m.cfg.OnMessageSent(latest.Context)
 		return nil
 	})
@@ -473,9 +493,8 @@ func (m *Manager) onAgentEvents(
 			if err := streamWriter.Write(msgops.AssistantDeltaText(chunk)); err != nil {
 				return err
 			}
-			calls := msgops.ToolCalls(chunk)
-			if len(calls) > 0 {
-				streamWriter.Seal()
+			if len(msgops.ToolCalls(chunk)) > 0 {
+				return streamWriter.Seal()
 			}
 			return nil
 		})
@@ -487,6 +506,16 @@ func (m *Manager) onAgentEvents(
 		}
 		if message.Role == "" {
 			message.Role = variant.Role
+		}
+		if message.Role == schema.Assistant {
+			m.logger.Debug("consumed assistant output",
+				zap.Int64("user_id", state.UserID),
+				zap.String("character_id", state.CharacterID),
+				zap.Bool("streaming", variant.IsStreaming),
+				zap.Int("content_characters", len([]rune(msgops.AssistantText(message)))),
+				zap.Int("reasoning_characters", len([]rune(message.ReasoningContent))),
+				zap.Int("tool_calls", len(msgops.ToolCalls(message))),
+			)
 		}
 		outputs = append(outputs, message)
 	}
@@ -546,7 +575,24 @@ func (m *Manager) onAgentEvents(
 		persisted = append(persisted, schema.UserMessage(item.Text))
 	}
 	persisted = append(persisted, outputs...)
-	if err := m.sessions.Append(ctx, state.UserID, state.CharacterID, state.MaxRounds, persisted...); err != nil {
+	sender := latest.Context.Sender()
+	username := utils.StringsFindFirstNonEmpty(sender.Username, strings.TrimSpace(sender.FirstName+" "+sender.LastName))
+	systemPrompt, err := m.characters.RenderSystemPrompt(ctx, state.CharacterID, username, time.Now())
+	if err != nil {
+		completeRequests(turn.Consumed, err)
+		return err
+	}
+	compressionCtx, cancelCompression := context.WithTimeout(context.WithoutCancel(ctx), m.cfg.ModelTimeout)
+	stopCompression := context.AfterFunc(m.ctx, cancelCompression)
+	defer func() {
+		stopCompression()
+		cancelCompression()
+	}()
+	if err = m.sessions.AppendRound(compressionCtx, state.UserID, state.CharacterID, session.CompressionOptions{
+		MaxRounds:    state.MaxRounds,
+		SystemPrompt: systemPrompt,
+		Agent:        state.agent(),
+	}, persisted...); err != nil {
 		completeRequests(turn.Consumed, err)
 		return err
 	}
@@ -556,50 +602,9 @@ func (m *Manager) onAgentEvents(
 		zap.Int64("user_id", state.UserID),
 		zap.String("character_id", state.CharacterID),
 		zap.Int("output_messages", len(outputs)),
+		zap.Int("sent_blocks", sentBlocks),
 	)
 	return nil
-}
-
-func consumeMessageVariant(
-	variant *adk.MessageVariant,
-	handleChunk func(*schema.Message) error,
-) (*schema.Message, error) {
-	if !variant.IsStreaming {
-		message, err := variant.GetMessage()
-		if err != nil || message == nil {
-			return message, err
-		}
-		if err := handleChunk(message); err != nil {
-			return nil, err
-		}
-		return message, nil
-	}
-	if variant.MessageStream == nil {
-		return nil, errors.New("streaming message variant has no stream")
-	}
-	defer variant.MessageStream.Close()
-
-	chunks := make([]*schema.Message, 0)
-	for {
-		chunk, err := variant.MessageStream.Recv()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if chunk == nil {
-			continue
-		}
-		if err := handleChunk(chunk); err != nil {
-			return nil, err
-		}
-		chunks = append(chunks, chunk)
-	}
-	if len(chunks) == 0 {
-		return nil, errors.New("streaming message variant contains no chunks")
-	}
-	return schema.ConcatMessages(chunks)
 }
 
 func (m *Manager) watchState(state *UserState) {
