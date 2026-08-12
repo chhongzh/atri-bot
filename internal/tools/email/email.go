@@ -16,6 +16,11 @@ import (
 	"github.com/jordan-wright/email"
 )
 
+const (
+	toolName        = "send_mail"
+	toolDescription = `Send an email over SMTP using the configured sender address. Supports an HTML body, one or more primary recipients, and optional CC recipients.`
+)
+
 type config struct {
 	SmtpHost    string `json:"smtpHost"`
 	SmtpPort    int    `json:"smtpPort"`
@@ -198,7 +203,7 @@ func Register(manager *toolmanager.Manager) error {
 
 func BindedRegister(allowPrivateIP bool) func(manager *toolmanager.Manager) error {
 	return func(manager *toolmanager.Manager) error {
-		return toolmanager.Register(manager, "send_mail", "发送邮件", config{},
+		return toolmanager.Register(manager, toolName, toolDescription, config{},
 			func(ctx context.Context, _ *toolmanager.RunningState, cfg *config, input *input) (*result, error) {
 				return mailTool(ctx, cfg, input, allowPrivateIP)
 			})

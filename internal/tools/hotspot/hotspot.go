@@ -12,6 +12,11 @@ import (
 	"resty.dev/v3"
 )
 
+const (
+	toolName        = "get_hotspot"
+	toolDescription = `Retrieve the current trending topics from Baidu's public hot-search board. Returns each topic's title and source URL; present the URLs only when the user explicitly requests them.`
+)
+
 type config struct {
 }
 
@@ -80,7 +85,7 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 func BindedRegister(logger *zap.Logger, restyClient *resty.Client) func(manager *toolmanager.Manager) error {
 	logger = logger.Named("hotspot tool")
 	fn := func(manager *toolmanager.Manager) error {
-		return toolmanager.Register(manager, "get_hotspot", "在百度等网络平台上搜索最新热点. 返回标题和链接, 除非用户显式要求你输出链接, 否则不要直接输出链接, 只需给出标题即可.", config{},
+		return toolmanager.Register(manager, toolName, toolDescription, config{},
 			func(ctx context.Context, runningState *toolmanager.RunningState, cfg *config, input *input) (*result, error) {
 				return tool(ctx, runningState, cfg, input, logger, restyClient)
 			})
