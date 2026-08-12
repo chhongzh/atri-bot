@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -66,6 +67,76 @@ func TestAppendRoundStoresCompleteTurnLoopRound(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertMessagesEqual(t, loaded, round)
+}
+
+func TestAppendRoundCompactsToolResultsBeforePersistence(t *testing.T) {
+	manager, db, logs := newTestManager(t)
+	content := strings.Repeat("前", maxPersistedToolResultRunes) + strings.Repeat("后", 2_000)
+	round := []*schema.Message{
+		schema.UserMessage("find it"),
+		schema.AssistantMessage("", []schema.ToolCall{{
+			ID:       "call-large",
+			Function: schema.FunctionCall{Name: "lookup", Arguments: `{}`},
+		}}),
+		schema.ToolMessage(content, "call-large", schema.WithToolName("lookup")),
+		schema.AssistantMessage("final reply", nil),
+	}
+	if err := manager.AppendRound(context.Background(), 14, "character.one", CompressionOptions{MaxRounds: 10}, round...); err != nil {
+		t.Fatal(err)
+	}
+
+	var record roundEntry
+	if err := db.Where("user_id = ? AND character_id = ?", 14, "character.one").First(&record).Error; err != nil {
+		t.Fatal(err)
+	}
+	var stored []*schema.Message
+	if err := json.Unmarshal([]byte(record.Messages), &stored); err != nil {
+		t.Fatal(err)
+	}
+	toolResult := stored[2]
+	if toolResult.ToolCallID != "call-large" || toolResult.ToolName != "lookup" {
+		t.Fatalf("stored tool identity = (%q, %q)", toolResult.ToolCallID, toolResult.ToolName)
+	}
+	if !strings.Contains(toolResult.Content, "tool result truncated for long-term history") {
+		t.Fatalf("stored tool result was not compacted: %q", toolResult.Content)
+	}
+	if len([]rune(toolResult.Content)) >= len([]rune(content)) {
+		t.Fatalf("stored tool result characters = %d, original = %d", len([]rune(toolResult.Content)), len([]rune(content)))
+	}
+	if len([]rune(toolResult.Content)) != maxPersistedToolResultRunes {
+		t.Fatalf("stored tool result characters = %d, want %d", len([]rune(toolResult.Content)), maxPersistedToolResultRunes)
+	}
+	if logs.FilterMessage("compacted tool results for session history").Len() != 1 {
+		t.Fatal("missing tool result compaction log")
+	}
+}
+
+func TestLoadCompactsLegacyToolResults(t *testing.T) {
+	manager, db, _ := newTestManager(t)
+	legacy := []*schema.Message{
+		schema.UserMessage("legacy"),
+		schema.ToolMessage(strings.Repeat("x", 20_000), "call-legacy", schema.WithToolName("legacy_lookup")),
+	}
+	data, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Create(&roundEntry{
+		UserID: 15, CharacterID: "character.one", Messages: string(data),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := manager.Load(context.Background(), 15, "character.one", CompressionOptions{MaxRounds: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 2 || !strings.Contains(loaded[1].Content, "tool result truncated for long-term history") {
+		t.Fatalf("loaded legacy tool result = %#v", loaded)
+	}
+	if len([]rune(loaded[1].Content)) >= len([]rune(legacy[1].Content)) {
+		t.Fatalf("loaded tool result characters = %d, original = %d", len([]rune(loaded[1].Content)), len([]rune(legacy[1].Content)))
+	}
 }
 
 func TestAppendRoundCompressesAtConfiguredRoundLimit(t *testing.T) {

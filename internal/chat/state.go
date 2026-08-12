@@ -20,12 +20,12 @@ type UserState struct {
 	CreatedAt      time.Time
 	LastActiveAt   time.Time
 
-	mu           sync.RWMutex
-	mcpClose     func()
-	queuedInputs []string
-	activeInputs []string
-	closed       bool
-	stale        bool
+	mu             sync.RWMutex
+	mcpClose       func()
+	queuedMessages []*schema.Message
+	activeMessages []*schema.Message
+	closed         bool
+	stale          bool
 }
 
 // ActiveUser describes an in-memory chat state without exposing credentials.
@@ -74,28 +74,28 @@ func (s *UserState) isStale() bool {
 	return s.stale
 }
 
-func (s *UserState) startTurnInputs() []string {
+func (s *UserState) startTurnMessages() []*schema.Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	inputs := s.queuedInputs
-	s.queuedInputs = nil
-	s.activeInputs = inputs
-	return inputs
+	messages := s.queuedMessages
+	s.queuedMessages = nil
+	s.activeMessages = messages
+	return messages
 }
 
-func (s *UserState) finishTurnInputs() []string {
+func (s *UserState) finishTurnMessages() []*schema.Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	inputs := s.activeInputs
-	s.activeInputs = nil
-	return inputs
+	messages := s.activeMessages
+	s.activeMessages = nil
+	return messages
 }
 
-func (s *UserState) requeueInputs(inputs []string) {
+func (s *UserState) requeueMessages(messages []*schema.Message) {
 	s.mu.Lock()
-	s.queuedInputs = append(inputs, s.queuedInputs...)
+	s.queuedMessages = append(messages, s.queuedMessages...)
 	s.mu.Unlock()
 }
 

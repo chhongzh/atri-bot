@@ -20,6 +20,12 @@ import (
 
 const DefaultMaxRounds = 36
 
+const (
+	maxPersistedToolResultRunes = 2_000
+	maxPersistedToolRoundRunes  = 8_000
+	toolResultTailRunes         = 400
+)
+
 //go:embed compression.j2
 var compressionTemplate string
 
@@ -116,7 +122,16 @@ func (m *Manager) AppendRound(
 	if len(messages) == 0 {
 		return nil
 	}
-	record, err := makeRoundEntry(userID, characterID, messages)
+	persisted, compactedMessages, removedRunes := compactToolResults(messages)
+	if compactedMessages > 0 {
+		m.logger.Info("compacted tool results for session history",
+			zap.Int64("user_id", userID),
+			zap.String("character_id", characterID),
+			zap.Int("tool_messages", compactedMessages),
+			zap.Int("removed_characters", removedRunes),
+		)
+	}
+	record, err := makeRoundEntry(userID, characterID, persisted)
 	if err != nil {
 		return err
 	}
@@ -372,17 +387,60 @@ func decodeHistoryWindow(summary *summaryEntry, rounds []roundEntry) ([]*schema.
 		if err := json.Unmarshal([]byte(record.Messages), &decoded); err != nil {
 			return nil, fmt.Errorf("decode session round %d: %w", record.ID, err)
 		}
-		messages = append(messages, decoded...)
+		compacted, _, _ := compactToolResults(decoded)
+		messages = append(messages, compacted...)
 	}
 	return messages, nil
 }
 
 func makeRoundEntry(userID int64, characterID string, messages []*schema.Message) (roundEntry, error) {
-	data, err := json.Marshal(messages)
+	persisted, _, _ := compactToolResults(messages)
+	data, err := json.Marshal(persisted)
 	if err != nil {
 		return roundEntry{}, fmt.Errorf("encode session round: %w", err)
 	}
 	return roundEntry{UserID: userID, CharacterID: characterID, Messages: string(data)}, nil
+}
+
+func compactToolResults(messages []*schema.Message) ([]*schema.Message, int, int) {
+	compacted := make([]*schema.Message, 0, len(messages))
+	remaining := maxPersistedToolRoundRunes
+	compactedMessages := 0
+	removedRunes := 0
+	for _, message := range messages {
+		if message == nil || message.Role != schema.Tool {
+			compacted = append(compacted, message)
+			continue
+		}
+
+		content := []rune(message.Content)
+		limit := min(maxPersistedToolResultRunes, remaining)
+		remaining -= min(len(content), limit)
+		if len(content) <= limit {
+			compacted = append(compacted, message)
+			continue
+		}
+
+		copy := *message
+		copy.Content = compactToolResultContent(content, limit)
+		compacted = append(compacted, &copy)
+		compactedMessages++
+		removedRunes += len(content) - limit
+	}
+	return compacted, compactedMessages, removedRunes
+}
+
+func compactToolResultContent(content []rune, limit int) string {
+	if limit <= 0 {
+		return "[tool result omitted from long-term history]"
+	}
+	omitted := []rune("\n...[tool result truncated for long-term history]...\n")
+	if limit <= len(omitted) {
+		return string(omitted[:limit])
+	}
+	tail := min(toolResultTailRunes, (limit-len(omitted))/4)
+	head := limit - len(omitted) - tail
+	return string(content[:head]) + string(omitted) + string(content[len(content)-tail:])
 }
 
 func makeSummaryEntry(userID int64, characterID string, cutoffRoundID uint, message *schema.Message) (summaryEntry, error) {

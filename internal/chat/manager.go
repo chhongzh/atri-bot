@@ -20,6 +20,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/adk"
+	"github.com/cloudwego/eino/adk/middlewares/dynamictool/toolsearch"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
@@ -384,18 +385,32 @@ func (m *Manager) buildAgent(
 	if err != nil {
 		return nil, err
 	}
-	all := make([]tool.BaseTool, 0, len(static)+len(mcpTools))
-	all = append(all, static...)
-	all = append(all, mcpTools...)
+	return buildAgentWithTools(ctx, model, static, mcpTools)
+}
+
+func buildAgentWithTools(
+	ctx context.Context,
+	model model.ChatModel,
+	static []tool.BaseTool,
+	mcpTools []tool.BaseTool,
+) (*adk.ChatModelAgent, error) {
+	handlers := []adk.ChatModelAgentMiddleware{&safeToolMiddleware{}}
+	if len(mcpTools) > 0 {
+		search, searchErr := toolsearch.New(ctx, &toolsearch.Config{DynamicTools: mcpTools})
+		if searchErr != nil {
+			return nil, fmt.Errorf("create MCP tool search: %w", searchErr)
+		}
+		handlers = append([]adk.ChatModelAgentMiddleware{search}, handlers...)
+	}
 	return adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Model:       model,
-		ToolsConfig: adk.ToolsConfig{ToolsNodeConfig: toolNodeConfig(all)},
-		Handlers:    []adk.ChatModelAgentMiddleware{&safeToolMiddleware{}},
+		ToolsConfig: adk.ToolsConfig{ToolsNodeConfig: toolNodeConfig(static)},
+		Handlers:    handlers,
 	})
 }
 
 func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Request) (*adk.GenInputResult[*Request, *schema.Message], error) {
-	interruptedInputs := state.startTurnInputs()
+	interruptedMessages := state.startTurnMessages()
 	latest := items[len(items)-1]
 	sender := latest.Context.Sender()
 	username := utils.StringsFindFirstNonEmpty(sender.Username, strings.TrimSpace(sender.FirstName+" "+sender.LastName))
@@ -422,12 +437,10 @@ func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Reque
 	if err != nil {
 		return nil, err
 	}
-	messages := make([]*schema.Message, 0, len(history)+len(interruptedInputs)+len(items)+1)
+	messages := make([]*schema.Message, 0, len(history)+len(interruptedMessages)+len(items)+1)
 	messages = append(messages, schema.SystemMessage(systemPrompt))
 	messages = append(messages, history...)
-	for _, input := range interruptedInputs {
-		messages = append(messages, schema.UserMessage(input))
-	}
+	messages = append(messages, interruptedMessages...)
 	for _, item := range items {
 		messages = append(messages, schema.UserMessage(item.Text))
 	}
@@ -435,7 +448,7 @@ func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Reque
 		zap.Int64("user_id", state.UserID),
 		zap.String("character_id", state.CharacterID),
 		zap.Int("history_messages", len(history)),
-		zap.Int("resumed_inputs", len(interruptedInputs)),
+		zap.Int("resumed_messages", len(interruptedMessages)),
 		zap.Int("consumed_requests", len(items)),
 	)
 	return &adk.GenInputResult[*Request, *schema.Message]{
@@ -452,16 +465,19 @@ func (m *Manager) onAgentEvents(
 	events *adk.AsyncIterator[*adk.AgentEvent],
 ) error {
 	var (
-		outputs []*schema.Message
-		turnErr error
+		outputs    []*schema.Message
+		turnErr    error
+		silentExit bool
 	)
 	latest := turn.Consumed[len(turn.Consumed)-1]
 	sentBlocks := 0
+	var deliveredBlocks []string
 	streamWriter := utils.NewAssistantStreamWriter(func(text string) error {
 		if err := utils.TelegramSendText(latest.Context, text); err != nil {
 			return err
 		}
 		sentBlocks++
+		deliveredBlocks = append(deliveredBlocks, text)
 		m.logger.Debug("sent assistant stream block",
 			zap.Int64("user_id", state.UserID),
 			zap.String("character_id", state.CharacterID),
@@ -483,6 +499,10 @@ func (m *Manager) onAgentEvents(
 			if turnErr == nil {
 				turnErr = event.Err
 			}
+			continue
+		}
+		if event.Action != nil && event.Action.Interrupted != nil {
+			silentExit = true
 			continue
 		}
 		if event.Output == nil || event.Output.MessageOutput == nil {
@@ -531,7 +551,7 @@ func (m *Manager) onAgentEvents(
 	}
 	if stopped {
 		streamWriter.Discard()
-		state.finishTurnInputs()
+		state.finishTurnMessages()
 		completeRequests(turn.Consumed, errs.ErrStateStopped)
 		return nil
 	}
@@ -547,37 +567,47 @@ func (m *Manager) onAgentEvents(
 	}
 	if preempted {
 		streamWriter.Discard()
-		interruptedInputs := state.finishTurnInputs()
-		interruptedInputs = append(interruptedInputs, requestTexts(turn.Consumed)...)
-		state.requeueInputs(interruptedInputs)
+		interruptedMessages := state.finishTurnMessages()
+		interruptedMessages = append(interruptedMessages, requestMessages(turn.Consumed)...)
+		interruptedMessages = append(interruptedMessages, assistantMessages(deliveredBlocks)...)
+		state.requeueMessages(interruptedMessages)
 		completeRequests(turn.Consumed, errs.ErrTurnPreempted)
 		m.logger.Debug("chat turn preempted",
 			zap.Int64("user_id", state.UserID),
-			zap.Int("queued_inputs", len(interruptedInputs)),
+			zap.Int("queued_messages", len(interruptedMessages)),
+			zap.Int("delivered_blocks", len(deliveredBlocks)),
+		)
+		return nil
+	}
+	if silentExit {
+		streamWriter.Discard()
+		state.finishTurnMessages()
+		completeRequests(turn.Consumed, nil)
+		m.logger.Info("chat turn exited without a reply",
+			zap.Int64("user_id", state.UserID),
+			zap.String("character_id", state.CharacterID),
 		)
 		return nil
 	}
 	if turnErr != nil {
 		streamWriter.Discard()
-		state.finishTurnInputs()
+		state.finishTurnMessages()
 		completeRequests(turn.Consumed, turnErr)
 		return turnErr
 	}
 	if err := streamWriter.Flush(); err != nil {
-		state.finishTurnInputs()
+		state.finishTurnMessages()
 		completeRequests(turn.Consumed, err)
 		return err
 	}
 
-	interruptedInputs := state.finishTurnInputs()
-	persisted := make([]*schema.Message, 0, len(interruptedInputs)+len(turn.Consumed)+len(outputs))
-	for _, input := range interruptedInputs {
-		persisted = append(persisted, schema.UserMessage(input))
-	}
+	interruptedMessages := state.finishTurnMessages()
+	persisted := make([]*schema.Message, 0, len(interruptedMessages)+len(turn.Consumed)+len(outputs))
+	persisted = append(persisted, interruptedMessages...)
 	for _, item := range turn.Consumed {
 		persisted = append(persisted, schema.UserMessage(item.Text))
 	}
-	persisted = append(persisted, outputs...)
+	persisted = append(persisted, persistentAgentOutputs(outputs)...)
 	sender := latest.Context.Sender()
 	username := utils.StringsFindFirstNonEmpty(sender.Username, strings.TrimSpace(sender.FirstName+" "+sender.LastName))
 	systemPrompt, err := m.characters.RenderSystemPrompt(ctx, state.CharacterID, username, time.Now())
@@ -610,9 +640,52 @@ func (m *Manager) onAgentEvents(
 	return nil
 }
 
+func persistentAgentOutputs(outputs []*schema.Message) []*schema.Message {
+	const toolSearchName = "tool_search"
+
+	searchCallIDs := make(map[string]struct{})
+	persisted := make([]*schema.Message, 0, len(outputs))
+	for _, message := range outputs {
+		if message == nil {
+			continue
+		}
+		switch message.Role {
+		case schema.Assistant:
+			calls := make([]schema.ToolCall, 0, len(message.ToolCalls))
+			for _, call := range message.ToolCalls {
+				if call.Function.Name == toolSearchName {
+					searchCallIDs[call.ID] = struct{}{}
+					continue
+				}
+				calls = append(calls, call)
+			}
+			if len(calls) == 0 && len(message.ToolCalls) > 0 && strings.TrimSpace(message.Content) == "" {
+				continue
+			}
+			if len(calls) != len(message.ToolCalls) {
+				copy := *message
+				copy.ToolCalls = calls
+				message = &copy
+			}
+		case schema.Tool:
+			_, searched := searchCallIDs[message.ToolCallID]
+			if searched || message.ToolName == toolSearchName {
+				continue
+			}
+		}
+		persisted = append(persisted, message)
+	}
+	return persisted
+}
+
 func (m *Manager) watchState(state *UserState) {
 	result := state.TurnLoop.Wait()
-	if result.ExitReason != nil {
+	var interruptErr *adk.InterruptError
+	if errors.As(result.ExitReason, &interruptErr) {
+		m.logger.Info("user turn loop exited after model silent exit",
+			zap.Int64("user_id", state.UserID),
+		)
+	} else if result.ExitReason != nil {
 		m.logger.Warn("user turn loop exited",
 			zap.Int64("user_id", state.UserID),
 			zap.Error(result.ExitReason),
@@ -638,10 +711,18 @@ func completeRequests(requests []*Request, err error) {
 	}
 }
 
-func requestTexts(requests []*Request) []string {
-	texts := make([]string, 0, len(requests))
+func requestMessages(requests []*Request) []*schema.Message {
+	messages := make([]*schema.Message, 0, len(requests))
 	for _, request := range requests {
-		texts = append(texts, request.Text)
+		messages = append(messages, schema.UserMessage(request.Text))
 	}
-	return texts
+	return messages
+}
+
+func assistantMessages(blocks []string) []*schema.Message {
+	messages := make([]*schema.Message, 0, len(blocks))
+	for _, block := range blocks {
+		messages = append(messages, schema.AssistantMessage(block, nil))
+	}
+	return messages
 }

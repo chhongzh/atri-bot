@@ -14,6 +14,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/session"
 	"github.com/chhongzh/atri-bot/internal/tools"
 	builtinconfig "github.com/chhongzh/atri-bot/internal/tools/builtin/config"
+	builtinexit "github.com/chhongzh/atri-bot/internal/tools/builtin/exit"
 	builtinmcp "github.com/chhongzh/atri-bot/internal/tools/builtin/mcp"
 	"gopkg.in/telebot.v4"
 )
@@ -52,6 +53,9 @@ func (r *Runner) Init(ctx context.Context) error {
 		return err
 	}
 	if err := builtinconfig.Register(r.tools); err != nil {
+		return err
+	}
+	if err := builtinexit.Register(r.tools, r.logger); err != nil {
 		return err
 	}
 	if err := builtinmcp.Register(r.tools, r.mcp); err != nil {
