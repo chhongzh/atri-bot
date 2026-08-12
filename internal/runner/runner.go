@@ -18,7 +18,7 @@ import (
 
 const (
 	DefaultCharacterRepositoryURL = "https://github.com/mihari-bot/chardef"
-	DefaultCharacterBranch        = "v2"
+	DefaultCharacterBranch        = "main"
 )
 
 type Config struct {
