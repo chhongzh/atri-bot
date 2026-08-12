@@ -50,6 +50,7 @@ func (m *Manager) Get(ctx context.Context, userID int64, name string) (*model.MC
 }
 
 func (m *Manager) Add(ctx context.Context, userID int64, name, rawURL, meta, header string) (*model.MCPProvider, error) {
+	var err error
 	name = strings.TrimSpace(name)
 	if len(name) > maxProviderNameBytes {
 		return nil, fmt.Errorf("mcp provider name exceeds %d bytes", maxProviderNameBytes)
@@ -58,11 +59,7 @@ func (m *Manager) Add(ctx context.Context, userID int64, name, rawURL, meta, hea
 	if len(rawURL) > maxProviderURLBytes {
 		return nil, fmt.Errorf("mcp url exceeds %d bytes", maxProviderURLBytes)
 	}
-	blockInternal, err := m.blockInternalFor(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if err = validateProviderURL(rawURL, blockInternal); err != nil {
+	if err := validateProviderURL(rawURL, m.allowPrivateIP); err != nil {
 		return nil, err
 	}
 	if meta, err = normalizeJSONObject(meta, "meta"); err != nil {
@@ -178,11 +175,7 @@ func (m *Manager) SetValue(ctx context.Context, userID int64, name, path string,
 	if _, err = parseMeta(string(decoded.Meta)); err != nil {
 		return nil, err
 	}
-	blockInternal, err := m.blockInternalFor(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if err = validateProviderURL(decoded.URL, blockInternal); err != nil {
+	if err = validateProviderURL(decoded.URL, m.allowPrivateIP); err != nil {
 		return nil, err
 	}
 	provider.URL = decoded.URL
@@ -220,21 +213,6 @@ func (m *Manager) maxToolsFor(ctx context.Context, userID int64) (int, error) {
 		return 0, err
 	}
 	return runtime.MCPDefaultMaxTools, nil
-}
-
-func (m *Manager) blockInternalFor(ctx context.Context, userID int64) (bool, error) {
-	settings, err := m.accounts.Settings(ctx, userID)
-	if err != nil {
-		return false, err
-	}
-	if settings.MCPBlockInternal != nil {
-		return *settings.MCPBlockInternal, nil
-	}
-	runtime, err := m.configs.Query[configmanager.RuntimeSettings](ctx, configmanager.RuntimeSettingsKey)
-	if err != nil {
-		return false, err
-	}
-	return runtime.MCPBlockInternal, nil
 }
 
 func providerJSON(provider *model.MCPProvider) ([]byte, error) {

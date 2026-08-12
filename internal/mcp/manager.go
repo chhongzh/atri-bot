@@ -31,10 +31,11 @@ func (r *LoadResult) Close() {
 
 // Manager owns MCP provider records and connection lifetimes.
 type Manager struct {
-	db       *gorm.DB
-	logger   *zap.Logger
-	accounts *account.Manager
-	configs  *configmanager.Manager
+	db             *gorm.DB
+	logger         *zap.Logger
+	accounts       *account.Manager
+	configs        *configmanager.Manager
+	allowPrivateIP bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -48,16 +49,17 @@ type Manager struct {
 	onChange   func(userID int64)
 }
 
-func New(ctx context.Context, logger *zap.Logger, db *gorm.DB, accounts *account.Manager, configs *configmanager.Manager) *Manager {
+func New(ctx context.Context, logger *zap.Logger, db *gorm.DB, accounts *account.Manager, configs *configmanager.Manager, allowPrivateIP bool) *Manager {
 	managerCtx, cancel := context.WithCancel(ctx)
 	return &Manager{
-		db:       db,
-		logger:   logger,
-		accounts: accounts,
-		configs:  configs,
-		ctx:      managerCtx,
-		cancel:   cancel,
-		onChange: func(int64) {},
+		db:             db,
+		logger:         logger,
+		accounts:       accounts,
+		configs:        configs,
+		allowPrivateIP: allowPrivateIP,
+		ctx:            managerCtx,
+		cancel:         cancel,
+		onChange:       func(int64) {},
 	}
 }
 

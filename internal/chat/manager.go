@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	errs "github.com/chhongzh/atri-bot/internal/errs"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	"github.com/chhongzh/atri-bot/internal/msgops"
+	"github.com/chhongzh/atri-bot/internal/security"
 	"github.com/chhongzh/atri-bot/internal/session"
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/chhongzh/atri-bot/internal/utils"
@@ -32,6 +34,7 @@ import (
 type Config struct {
 	StateTTL          time.Duration
 	ModelTimeout      time.Duration
+	AllowPrivateIP    bool
 	SendLoadingResult func(telebot.Context, string) error
 	OnMessageSent     func(telebot.Context)
 }
@@ -305,11 +308,16 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("%w: missing %s", errs.ErrAIConfigIncomplete, strings.Join(missing, ", "))
 	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
 	chatModel, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
 		BaseURL: strings.TrimSpace(settings.AIBaseURL),
 		APIKey:  strings.TrimSpace(settings.AIAPIKey),
 		Model:   strings.TrimSpace(settings.AIModel),
 		Timeout: m.cfg.ModelTimeout,
+		HTTPClient: &http.Client{
+			Transport: security.NewSafeHTTPTransport(transport, m.cfg.AllowPrivateIP),
+			Timeout:   m.cfg.ModelTimeout,
+		},
 	})
 	if err != nil {
 		return nil, err

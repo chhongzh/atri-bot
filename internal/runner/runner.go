@@ -34,9 +34,9 @@ type Config struct {
 	DefaultToolPermissions map[string]bool
 
 	AIModelTimeout time.Duration
+	AllowPrivateIP bool
 
 	MCPDefaultMaxTools int
-	MCPBlockInternal   bool
 
 	ToolRegistrars []tools.Registrar
 }

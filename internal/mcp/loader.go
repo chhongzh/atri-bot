@@ -53,10 +53,6 @@ func (m *Manager) loadUserTools(
 	if err != nil {
 		return nil, err
 	}
-	blockInternal, err := m.blockInternalFor(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
 	if len(providers) > maxTools {
 		m.logger.Warn("mcp provider limit exceeded; extra providers skipped",
 			zap.Int64("user_id", userID),
@@ -80,7 +76,7 @@ func (m *Manager) loadUserTools(
 		go func(index int) {
 			defer waitGroup.Done()
 			provider := &providers[index]
-			loaded, closeFn, loadErr := m.loadProvider(ctx, userID, provider, blockInternal)
+			loaded, closeFn, loadErr := m.loadProvider(ctx, userID, provider)
 			if loadErr == nil && ctx.Err() != nil {
 				closeFn()
 				loaded = nil
@@ -126,13 +122,9 @@ func (m *Manager) loadProvider(
 	ctx context.Context,
 	userID int64,
 	provider *model.MCPProvider,
-	blockInternal bool,
 ) ([]tool.BaseTool, func(), error) {
 	connectCtx, cancel := context.WithTimeout(ctx, connectTimeout)
 	defer cancel()
-	if err := validateProviderURLContext(connectCtx, provider.URL, blockInternal); err != nil {
-		return nil, nil, err
-	}
 	headers, err := parseStringMap(provider.Header, "header")
 	if err != nil {
 		return nil, nil, err
@@ -149,7 +141,6 @@ func (m *Manager) loadProvider(
 		provider,
 		headers,
 		meta,
-		blockInternal,
 		"streamable_http",
 		func(httpClient *http.Client) (*client.Client, error) {
 			return client.NewStreamableHttpClient(
@@ -178,7 +169,6 @@ func (m *Manager) loadProvider(
 		provider,
 		headers,
 		meta,
-		blockInternal,
 		"sse",
 		func(httpClient *http.Client) (*client.Client, error) {
 			return client.NewSSEMCPClient(
@@ -202,11 +192,10 @@ func (m *Manager) loadProviderWithTransport(
 	provider *model.MCPProvider,
 	headers map[string]string,
 	meta *mcpprotocol.Meta,
-	blockInternal bool,
 	transportName string,
 	newClient func(*http.Client) (*client.Client, error),
 ) ([]tool.BaseTool, func(), error) {
-	httpClient, closeHTTPClient := newMCPHTTPClient(blockInternal)
+	httpClient, closeHTTPClient := newMCPHTTPClient(m.allowPrivateIP)
 	mcpClient, err := newClient(httpClient)
 	if err != nil {
 		closeHTTPClient()

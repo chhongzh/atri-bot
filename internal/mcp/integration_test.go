@@ -43,7 +43,7 @@ func newIntegrationMCPServer() *server.MCPServer {
 
 func testLoadLoadsRealMCPServer(t *testing.T, endpoint string) {
 	t.Helper()
-	manager, _ := newTestManager(t, configmanager.RuntimeSettings{MCPDefaultMaxTools: 32, MCPBlockInternal: false})
+	manager, _ := newTestManager(t, configmanager.RuntimeSettings{MCPDefaultMaxTools: 32}, true)
 	defer manager.Close()
 
 	ctx := context.Background()

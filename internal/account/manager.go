@@ -289,42 +289,6 @@ func (m *Manager) SetMCPMaxTools(ctx context.Context, actorID, targetID int64, v
 	return nil
 }
 
-// SetMCPBlockInternal sets a per-user override for the internal network guard.
-// A nil value restores the global default.
-func (m *Manager) SetMCPBlockInternal(ctx context.Context, actorID, targetID int64, value *bool) error {
-	if err := m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := requireAdmin(tx, actorID); err != nil {
-			return err
-		}
-		var target User
-		if err := tx.First(&target, "telegram_id = ?", targetID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrUserNotFound
-			}
-			return err
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	settings, err := m.Settings(ctx, targetID)
-	if err != nil {
-		return err
-	}
-	settings.MCPBlockInternal = value
-	if err = m.configs.SetUser(ctx, targetID, configmanager.UserSettingsKey, settings); err != nil {
-		return err
-	}
-	fields := []zap.Field{zap.Int64("actor_id", actorID), zap.Int64("user_id", targetID)}
-	if value == nil {
-		fields = append(fields, zap.String("block_internal", "default"))
-	} else {
-		fields = append(fields, zap.Bool("block_internal", *value))
-	}
-	m.logger.Info("updated user mcp internal network guard", fields...)
-	return nil
-}
-
 func (m *Manager) Admins(ctx context.Context) ([]User, error) {
 	var users []User
 	err := m.db.WithContext(ctx).

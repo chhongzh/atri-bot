@@ -84,7 +84,7 @@ character_repository_url: "https://github.com/mihari-bot/chardef"
 character_repository_branch: "v2"
 
 mcp:
-  max_tools: 32
+  max_tools: 128
   block_internal: true
 ```
 
@@ -110,8 +110,8 @@ mcp:
 - `bot.max_rounds` 新用户压缩会话历史前保留的完整 Telegram 轮数，之后每个用户可以用 `/ai rounds` 单独修改。一次 TurnLoop 从收到的一组 user 消息开始，包含其间所有 assistant、tool call 和 tool result，直到最终 assistant 回复结束，整体计为一轮。达到上限后会先阻塞新一轮，用该用户自己的模型生成带 cutoff 的 system history；原始轮次继续保留，后续加载只读取最新 system history 与 cutoff 之后的新轮次。
 - `atri_cwd` 数据和本地角色的根目录，默认当前目录。数据库 `atri-bot.db` 和远程角色缓存都放在这里。
 - `character_repository_url` 和 `character_repository_branch` 默认角色仓库和分支。
-- `mcp.max_tools` 每个用户可添加的 MCP provider 上限，默认 32。
-- `mcp.block_internal` 是否拦截 localhost、内网域名和私网 IP，默认 true。
+- `mcp.max_tools` 每个用户可添加的 MCP provider 上限，默认 128。
+- `network.allow_private_ip` 是否允许用户配置的网络出口访问 localhost、内网域名和私网 IP，默认 false。
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
@@ -126,7 +126,7 @@ mcp:
 - `/character <角色ID>` 查看详情或切换角色。
 - `/session-clear` 清空当前角色的会话历史。
 - `/toolperm list|allow|deny|reset <用户ID> [工具名]` 管理员管理用户的工具权限。
-- `/mcp show|limit|internal <用户ID> [值]` 管理员管理用户的 MCP 设置。
+- `/mcp show|limit <用户ID> [值]` 管理员管理用户的 MCP 工具数量上限。
 - `/providers`、`/provider add|set|remove|refresh` 管理员管理角色来源。
 - `/admin stats|promote|demote|ban|unban|delete <用户ID>`、`/users`、`/user`、`/admins`、`/active-users` 管理员管理账户和运行状态。
 
@@ -148,12 +148,11 @@ MCP 是当前工具能力的重点。角色通过 MCP 协议调用外部服务�
 /toolperm reset <用户ID> mcp
 ```
 
-管理员还能单独覆盖某个用户的 provider 上限和内网拦截开关。
+管理员可以单独覆盖某个用户的 provider 上限；网络访问范围由全局 `network.allow_private_ip` 统一控制。
 
 ```text
 /mcp show <用户ID>
 /mcp limit <用户ID> <正整数|0>
-/mcp internal <用户ID> <on|off|default>
 ```
 
 ### 角色与 chardef

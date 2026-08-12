@@ -187,7 +187,7 @@ func Register(manager *toolmanager.Manager, mcpManager *mcpmanager.Manager) erro
 
 	updateTool, err := toolutils.InferTool(
 		UpdateMCPProviderName,
-		"修改当前用户某个 MCP provider 的字段。可新增 meta 或 header 的子键；修改 url 会重新做内网地址检查。",
+		"修改当前用户某个 MCP provider 的字段。可新增 meta 或 header 的子键；修改 url 会按全局网络策略重新校验。",
 		func(ctx context.Context, input *updateMCPProviderValueInput) (*mcpProviderValueResult, error) {
 			state, ok := toolmanager.RunningStateFromContext(ctx)
 			if !ok {

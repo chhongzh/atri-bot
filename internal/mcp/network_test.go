@@ -1,6 +1,10 @@
 package mcp
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/chhongzh/atri-bot/internal/security"
+)
 
 func TestIsInternalHost(t *testing.T) {
 	internal := []string{
@@ -20,18 +24,13 @@ func TestIsInternalHost(t *testing.T) {
 		"fe80::1",
 	}
 	for _, host := range internal {
-		got, err := isInternalHost(host)
-		if err != nil {
-			t.Errorf("isInternalHost(%q) error = %v", host, err)
-			continue
-		}
-		if !got {
+		if !security.IsInternalHost(host) {
 			t.Errorf("isInternalHost(%q) = false, want true", host)
 		}
 	}
 
-	if got, err := isInternalHost("example.com"); err != nil || got {
-		t.Errorf("isInternalHost(example.com) = %v, %v; want false, nil", got, err)
+	if security.IsInternalHost("example.com") {
+		t.Error("isInternalHost(example.com) = true, want false")
 	}
 }
 

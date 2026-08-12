@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 
 	"github.com/chhongzh/atri-bot/internal/runner"
+	"github.com/chhongzh/atri-bot/internal/security"
 	"github.com/chhongzh/atri-bot/internal/session"
 	"github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/chhongzh/atri-bot/internal/tools/email"
@@ -45,8 +47,8 @@ type config struct {
 	cwd                    string
 	defaultMaxRounds       int
 	defaultToolPermissions map[string]bool
+	allowPrivateIP         bool
 	mcpDefaultMaxTools     int
-	mcpBlockInternal       bool
 }
 
 type toolsConfig struct {
@@ -82,17 +84,14 @@ func getConfig() (*config, error) {
 		return nil, fmt.Errorf("configuration tools: %w", err)
 	}
 
-	mcpDefaultMaxTools := 32
+	mcpDefaultMaxTools := 128
 	if v.IsSet("mcp.max_tools") {
 		mcpDefaultMaxTools = v.GetInt("mcp.max_tools")
 		if mcpDefaultMaxTools <= 0 {
 			return nil, fmt.Errorf("configuration mcp.max_tools must be positive")
 		}
 	}
-	mcpBlockInternal := true
-	if v.IsSet("mcp.block_internal") {
-		mcpBlockInternal = v.GetBool("mcp.block_internal")
-	}
+	allowPrivateIP := v.GetBool("network.allow_private_ip")
 
 	cfg := &config{
 		botToken:               v.GetString("telegram.bot_token"),
@@ -101,8 +100,8 @@ func getConfig() (*config, error) {
 		cwd:                    v.GetString("atri_cwd"),
 		defaultMaxRounds:       defaultMaxRounds,
 		defaultToolPermissions: toolsCfg.DefaultPermissions,
+		allowPrivateIP:         allowPrivateIP,
 		mcpDefaultMaxTools:     mcpDefaultMaxTools,
-		mcpBlockInternal:       mcpBlockInternal,
 	}
 	if cfg.botToken == "" {
 		return nil, fmt.Errorf("required configuration telegram.bot_token is missing")
@@ -131,17 +130,19 @@ func getRunner(logger *zap.Logger, restyClient *resty.Client, cfg *config, db *g
 		DefaultMaxRounds:       cfg.defaultMaxRounds,
 		DefaultToolPermissions: cfg.defaultToolPermissions,
 		MCPDefaultMaxTools:     cfg.mcpDefaultMaxTools,
-		MCPBlockInternal:       cfg.mcpBlockInternal,
+		AllowPrivateIP:         cfg.allowPrivateIP,
 
 		ToolRegistrars: []tools.Registrar{
-			email.Register,
+			email.BindedRegister(cfg.allowPrivateIP),
 			hotspot.BindedRegister(logger, restyClient),
 		},
 	}, db)
 }
 
-func getRestyClient() *resty.Client {
+func getRestyClient(cfg *config) *resty.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
 	client := resty.New().
+		SetTransport(security.NewSafeHTTPTransport(transport, cfg.allowPrivateIP)).
 		SetHeader("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36")
 	return client
 }

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/security"
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/jordan-wright/email"
 )
@@ -34,7 +35,7 @@ type result struct {
 	Delivered bool `json:"delivered"`
 }
 
-func mailTool(ctx context.Context, cfg *config, input *input) (*result, error) {
+func mailTool(ctx context.Context, cfg *config, input *input, allowPrivateIP bool) (*result, error) {
 	if err := validateInput(input); err != nil {
 		return nil, err
 	}
@@ -52,16 +53,92 @@ func mailTool(ctx context.Context, cfg *config, input *input) (*result, error) {
 
 	address := net.JoinHostPort(host, strconv.Itoa(port))
 	if port == 465 {
-		err = e.SendWithTLS(address, auth, &tls.Config{ServerName: host})
+		err = sendWithTLS(ctx, e, address, host, auth, allowPrivateIP)
 	} else {
-		// smtp.SendMail negotiates STARTTLS when the server advertises it.
-		err = e.Send(address, auth)
+		err = sendWithStartTLS(ctx, e, address, host, auth, allowPrivateIP)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("send email via %s: %w", address, err)
 	}
 
 	return &result{Delivered: true}, nil
+}
+
+func sendWithTLS(ctx context.Context, e *email.Email, address, host string, auth smtp.Auth, allowPrivateIP bool) error {
+	connection, err := security.NewSafeDialer(&net.Dialer{}, allowPrivateIP).DialContext(ctx, "tcp", address)
+	if err != nil {
+		return err
+	}
+	return sendSMTP(e, tls.Client(connection, &tls.Config{ServerName: host}), host, auth, nil)
+}
+
+func sendWithStartTLS(ctx context.Context, e *email.Email, address, host string, auth smtp.Auth, allowPrivateIP bool) error {
+	connection, err := security.NewSafeDialer(&net.Dialer{}, allowPrivateIP).DialContext(ctx, "tcp", address)
+	if err != nil {
+		return err
+	}
+	return sendSMTP(e, connection, host, auth, &tls.Config{ServerName: host})
+}
+
+func sendSMTP(e *email.Email, connection net.Conn, host string, auth smtp.Auth, startTLSConfig *tls.Config) error {
+	defer connection.Close()
+	client, err := smtp.NewClient(connection, host)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	if err = client.Hello("localhost"); err != nil {
+		return err
+	}
+	if startTLSConfig != nil {
+		if supported, _ := client.Extension("STARTTLS"); supported {
+			if err = client.StartTLS(startTLSConfig); err != nil {
+				return err
+			}
+		}
+	}
+	if auth != nil {
+		if supported, _ := client.Extension("AUTH"); supported {
+			if err = client.Auth(auth); err != nil {
+				return err
+			}
+		}
+	}
+	from, err := mail.ParseAddress(e.From)
+	if err != nil {
+		return err
+	}
+	recipients := append(append([]string{}, e.To...), e.Cc...)
+	if len(recipients) == 0 {
+		return errors.New("at least one recipient is required")
+	}
+	if err = client.Mail(from.Address); err != nil {
+		return err
+	}
+	for _, recipient := range recipients {
+		parsed, parseErr := mail.ParseAddress(recipient)
+		if parseErr != nil {
+			return parseErr
+		}
+		if err = client.Rcpt(parsed.Address); err != nil {
+			return err
+		}
+	}
+	raw, err := e.Bytes()
+	if err != nil {
+		return err
+	}
+	writer, err := client.Data()
+	if err != nil {
+		return err
+	}
+	if _, err = writer.Write(raw); err != nil {
+		return err
+	}
+	if err = writer.Close(); err != nil {
+		return err
+	}
+	return client.Quit()
 }
 
 func validateInput(input *input) error {
@@ -116,8 +193,14 @@ func trimAddresses(addresses []string) []string {
 }
 
 func Register(manager *toolmanager.Manager) error {
-	return toolmanager.Register(manager, "send_mail", "发送邮件", config{},
-		func(ctx context.Context, _ *toolmanager.RunningState, cfg *config, input *input) (*result, error) {
-			return mailTool(ctx, cfg, input)
-		})
+	return BindedRegister(false)(manager)
+}
+
+func BindedRegister(allowPrivateIP bool) func(manager *toolmanager.Manager) error {
+	return func(manager *toolmanager.Manager) error {
+		return toolmanager.Register(manager, "send_mail", "发送邮件", config{},
+			func(ctx context.Context, _ *toolmanager.RunningState, cfg *config, input *input) (*result, error) {
+				return mailTool(ctx, cfg, input, allowPrivateIP)
+			})
+	}
 }

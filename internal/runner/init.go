@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/command"
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
+	"github.com/chhongzh/atri-bot/internal/security"
 	"github.com/chhongzh/atri-bot/internal/session"
 	"github.com/chhongzh/atri-bot/internal/tools"
 	builtinconfig "github.com/chhongzh/atri-bot/internal/tools/builtin/config"
@@ -33,11 +35,10 @@ func (r *Runner) Init(ctx context.Context) error {
 		DefaultMaxRounds:       r.cfg.DefaultMaxRounds,
 		DefaultToolPermissions: r.cfg.DefaultToolPermissions,
 		MCPDefaultMaxTools:     r.cfg.MCPDefaultMaxTools,
-		MCPBlockInternal:       r.cfg.MCPBlockInternal,
 	}); err != nil {
 		return err
 	}
-	r.mcp = mcpmanager.New(context.WithoutCancel(ctx), r.logger, r.db, r.accounts, r.configs)
+	r.mcp = mcpmanager.New(context.WithoutCancel(ctx), r.logger, r.db, r.accounts, r.configs, r.cfg.AllowPrivateIP)
 	if err := r.mcp.Init(); err != nil {
 		return err
 	}
@@ -72,6 +73,7 @@ func (r *Runner) Init(ctx context.Context) error {
 	r.chats = chat.New(context.WithoutCancel(ctx), r.logger, r.db, r.accounts, r.configs, r.characters, r.sessions, r.tools, r.mcp, chat.Config{
 		StateTTL:          r.cfg.StateTTL,
 		ModelTimeout:      r.cfg.AIModelTimeout,
+		AllowPrivateIP:    r.cfg.AllowPrivateIP,
 		SendLoadingResult: r.sendLoadingResultAndDelete,
 		OnMessageSent:     r.onMessageSent,
 	})
@@ -105,8 +107,12 @@ func (r *Runner) Init(ctx context.Context) error {
 }
 
 func (r *Runner) initBot() error {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
 	bot, err := telebot.NewBot(telebot.Settings{
-		Token:   r.cfg.BotToken,
+		Token: r.cfg.BotToken,
+		Client: &http.Client{
+			Transport: security.NewSafeHTTPTransport(transport, r.cfg.AllowPrivateIP),
+		},
 		OnError: r.handlerForError,
 	})
 	if err != nil {
