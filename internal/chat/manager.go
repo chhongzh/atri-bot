@@ -11,6 +11,7 @@ import (
 
 	"github.com/chhongzh/atri-bot/internal/account"
 	"github.com/chhongzh/atri-bot/internal/character"
+	configmanager "github.com/chhongzh/atri-bot/internal/config"
 	errs "github.com/chhongzh/atri-bot/internal/errs"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	"github.com/chhongzh/atri-bot/internal/msgops"
@@ -28,17 +29,17 @@ import (
 )
 
 type Config struct {
-	StateTTL               time.Duration
-	ModelTimeout           time.Duration
-	DefaultToolPermissions map[string]bool
-	SendLoadingResult      func(telebot.Context, string) error
-	OnMessageSent          func(telebot.Context)
+	StateTTL          time.Duration
+	ModelTimeout      time.Duration
+	SendLoadingResult func(telebot.Context, string) error
+	OnMessageSent     func(telebot.Context)
 }
 
 type Manager struct {
 	logger     *zap.Logger
 	db         *gorm.DB
 	accounts   *account.Manager
+	configs    *configmanager.Manager
 	characters *character.Manager
 	sessions   *session.Manager
 	tools      *toolmanager.Manager
@@ -59,6 +60,7 @@ func New(
 	logger *zap.Logger,
 	db *gorm.DB,
 	accounts *account.Manager,
+	configs *configmanager.Manager,
 	characters *character.Manager,
 	sessions *session.Manager,
 	tools *toolmanager.Manager,
@@ -76,12 +78,13 @@ func New(
 		logger:                 logger,
 		db:                     db,
 		accounts:               accounts,
+		configs:                configs,
 		characters:             characters,
 		sessions:               sessions,
 		tools:                  tools,
 		mcp:                    mcpManager,
 		cfg:                    cfg,
-		defaultToolPermissions: normalizeDefaultToolPermissions(logger, tools, cfg.DefaultToolPermissions),
+		defaultToolPermissions: make(map[string]bool),
 		ctx:                    managerCtx,
 		cancel:                 cancel,
 		states:                 make(map[int64]*UserState),
@@ -270,11 +273,11 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 		)
 	}
 
-	user, err := m.accounts.Get(ctx, userID)
+	settings, err := m.accounts.Settings(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	characterID := user.CharacterID
+	characterID := settings.CharacterID
 	if characterID == "" {
 		defaultCharacter, ok := m.characters.Default()
 		if !ok {
@@ -289,22 +292,22 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 	}
 
 	missing := make([]string, 0, 3)
-	if strings.TrimSpace(user.AIBaseURL) == "" {
+	if strings.TrimSpace(settings.AIBaseURL) == "" {
 		missing = append(missing, "base-url")
 	}
-	if strings.TrimSpace(user.AIAPIKey) == "" {
+	if strings.TrimSpace(settings.AIAPIKey) == "" {
 		missing = append(missing, "key")
 	}
-	if strings.TrimSpace(user.AIModel) == "" {
+	if strings.TrimSpace(settings.AIModel) == "" {
 		missing = append(missing, "model")
 	}
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("%w: missing %s", errs.ErrAIConfigIncomplete, strings.Join(missing, ", "))
 	}
 	chatModel, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
-		BaseURL: strings.TrimSpace(user.AIBaseURL),
-		APIKey:  strings.TrimSpace(user.AIAPIKey),
-		Model:   strings.TrimSpace(user.AIModel),
+		BaseURL: strings.TrimSpace(settings.AIBaseURL),
+		APIKey:  strings.TrimSpace(settings.AIAPIKey),
+		Model:   strings.TrimSpace(settings.AIModel),
 		Timeout: m.cfg.ModelTimeout,
 	})
 	if err != nil {
@@ -332,7 +335,7 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 	state := &UserState{
 		UserID:         userID,
 		CharacterID:    characterID,
-		MaxRounds:      user.AIMaxRounds,
+		MaxRounds:      settings.AIMaxRounds,
 		TelebotContext: c,
 		CreatedAt:      time.Now(),
 		LastActiveAt:   time.Now(),

@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	configmanager "github.com/chhongzh/atri-bot/internal/config"
 	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -207,25 +208,33 @@ func (m *Manager) count(ctx context.Context, userID int64) (int, error) {
 }
 
 func (m *Manager) maxToolsFor(ctx context.Context, userID int64) (int, error) {
-	user, err := m.accounts.Get(ctx, userID)
+	settings, err := m.accounts.Settings(ctx, userID)
 	if err != nil {
 		return 0, err
 	}
-	if user.MCPMaxTools > 0 {
-		return user.MCPMaxTools, nil
+	if settings.MCPMaxTools > 0 {
+		return settings.MCPMaxTools, nil
 	}
-	return m.cfg.DefaultMaxTools, nil
+	runtime, err := m.configs.Query[configmanager.RuntimeSettings](ctx, configmanager.RuntimeSettingsKey)
+	if err != nil {
+		return 0, err
+	}
+	return runtime.MCPDefaultMaxTools, nil
 }
 
 func (m *Manager) blockInternalFor(ctx context.Context, userID int64) (bool, error) {
-	user, err := m.accounts.Get(ctx, userID)
+	settings, err := m.accounts.Settings(ctx, userID)
 	if err != nil {
 		return false, err
 	}
-	if user.MCPBlockInternal != nil {
-		return *user.MCPBlockInternal, nil
+	if settings.MCPBlockInternal != nil {
+		return *settings.MCPBlockInternal, nil
 	}
-	return m.cfg.BlockInternal, nil
+	runtime, err := m.configs.Query[configmanager.RuntimeSettings](ctx, configmanager.RuntimeSettingsKey)
+	if err != nil {
+		return false, err
+	}
+	return runtime.MCPBlockInternal, nil
 }
 
 func providerJSON(provider *model.MCPProvider) ([]byte, error) {

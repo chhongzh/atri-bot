@@ -5,19 +5,13 @@ import (
 	"sync"
 
 	"github.com/chhongzh/atri-bot/internal/account"
+	configmanager "github.com/chhongzh/atri-bot/internal/config"
 	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/cloudwego/eino/components/tool"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
-
-const DefaultMaxTools = 32
-
-type Config struct {
-	DefaultMaxTools int
-	BlockInternal   bool
-}
 
 // LoadResult owns the remote tools and connections loaded for one chat state.
 type LoadResult struct {
@@ -40,7 +34,7 @@ type Manager struct {
 	db       *gorm.DB
 	logger   *zap.Logger
 	accounts *account.Manager
-	cfg      Config
+	configs  *configmanager.Manager
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -54,16 +48,13 @@ type Manager struct {
 	onChange   func(userID int64)
 }
 
-func New(ctx context.Context, logger *zap.Logger, db *gorm.DB, accounts *account.Manager, cfg Config) *Manager {
-	if cfg.DefaultMaxTools <= 0 {
-		cfg.DefaultMaxTools = DefaultMaxTools
-	}
+func New(ctx context.Context, logger *zap.Logger, db *gorm.DB, accounts *account.Manager, configs *configmanager.Manager) *Manager {
 	managerCtx, cancel := context.WithCancel(ctx)
 	return &Manager{
 		db:       db,
 		logger:   logger,
 		accounts: accounts,
-		cfg:      cfg,
+		configs:  configs,
 		ctx:      managerCtx,
 		cancel:   cancel,
 		onChange: func(int64) {},

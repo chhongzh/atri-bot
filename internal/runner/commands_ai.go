@@ -22,17 +22,17 @@ func (r *Runner) commandAI(c telebot.Context, args []string) {
 	action := commandAction(args, "show")
 	switch action {
 	case "show":
-		user, err := r.accounts.Get(ctx, sender.ID)
+		settings, err := r.accounts.Settings(ctx, sender.ID)
 		if err != nil {
 			r.commandError(c, err)
 			return
 		}
 		_ = r.sendSystemResultAndDelete(c, fmt.Sprintf(
 			"Base URL: %s\nModel: %s\nAPI Key: %s\nMax Rounds: %d",
-			showAIValue(user.AIBaseURL),
-			showAIValue(user.AIModel),
-			maskSecret(user.AIAPIKey),
-			user.AIMaxRounds,
+			showAIValue(settings.AIBaseURL),
+			showAIValue(settings.AIModel),
+			maskSecret(settings.AIAPIKey),
+			settings.AIMaxRounds,
 		))
 		return
 	case "base-url", "key", "model", "rounds":

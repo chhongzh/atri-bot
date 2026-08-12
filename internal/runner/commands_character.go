@@ -39,16 +39,16 @@ func (r *Runner) commandCharacter(c telebot.Context, args []string) {
 	sender := c.Sender()
 	ctx := context.Background()
 	if len(args) == 0 {
-		user, err := r.accounts.Get(ctx, sender.ID)
+		settings, err := r.accounts.Settings(ctx, sender.ID)
 		if err != nil {
 			r.commandError(c, err)
 			return
 		}
-		if user.CharacterID == "" {
+		if settings.CharacterID == "" {
 			_ = r.sendSystemResultAndDelete(c, "尚未选择角色，发送消息时会自动选择默认角色。")
 			return
 		}
-		_ = r.sendSystemResultAndDelete(c, "当前角色："+user.CharacterID)
+		_ = r.sendSystemResultAndDelete(c, "当前角色："+settings.CharacterID)
 		return
 	}
 
@@ -68,16 +68,16 @@ func (r *Runner) commandCharacter(c telebot.Context, args []string) {
 func (r *Runner) commandSessionClear(c telebot.Context, _ []string) {
 	sender := c.Sender()
 	ctx := context.Background()
-	user, err := r.accounts.Get(ctx, sender.ID)
+	settings, err := r.accounts.Settings(ctx, sender.ID)
 	if err != nil {
 		r.commandError(c, err)
 		return
 	}
-	if user.CharacterID == "" {
+	if settings.CharacterID == "" {
 		r.commandError(c, fmt.Errorf("尚未选择角色"))
 		return
 	}
-	if err = r.sessions.Clear(ctx, sender.ID, user.CharacterID); err != nil {
+	if err = r.sessions.Clear(ctx, sender.ID, settings.CharacterID); err != nil {
 		r.commandError(c, err)
 		return
 	}

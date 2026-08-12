@@ -16,15 +16,6 @@ type User struct {
 	Role        Role `gorm:"type:varchar(16);not null;default:user;index"`
 	Banned      bool `gorm:"not null;default:false;index"`
 
-	CharacterID string
-	AIBaseURL   string
-	AIAPIKey    string
-	AIModel     string
-	AIMaxRounds int `gorm:"not null;default:36"`
-
-	MCPMaxTools      int `gorm:"not null;default:0"`
-	MCPBlockInternal *bool
-
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

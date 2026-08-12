@@ -84,19 +84,19 @@ func parseOptionalBool(value string) (*bool, error) {
 }
 
 func (r *Runner) showMCPSettings(c telebot.Context, ctx context.Context, targetID int64) {
-	user, err := r.accounts.Get(ctx, targetID)
+	settings, err := r.accounts.Settings(ctx, targetID)
 	if err != nil {
 		r.commandError(c, err)
 		return
 	}
 	limit := "默认"
-	if user.MCPMaxTools > 0 {
-		limit = strconv.Itoa(user.MCPMaxTools)
+	if settings.MCPMaxTools > 0 {
+		limit = strconv.Itoa(settings.MCPMaxTools)
 	}
 	blockInternal := "默认"
-	if user.MCPBlockInternal != nil {
+	if settings.MCPBlockInternal != nil {
 		blockInternal = "关闭"
-		if *user.MCPBlockInternal {
+		if *settings.MCPBlockInternal {
 			blockInternal = "开启"
 		}
 	}

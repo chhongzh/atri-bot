@@ -7,23 +7,28 @@ import (
 	"time"
 
 	"github.com/chhongzh/atri-bot/internal/account"
+	configmanager "github.com/chhongzh/atri-bot/internal/config"
 	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
-func newTestManager(t *testing.T, cfg Config) (*Manager, *account.Manager) {
+func newTestManager(t *testing.T, runtime configmanager.RuntimeSettings) (*Manager, *account.Manager) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	accounts := account.New(db, zap.NewNop(), 36)
+	configs := configmanager.New(db)
+	accounts := account.New(db, zap.NewNop(), configs, 36)
 	if err = accounts.Init(); err != nil {
 		t.Fatal(err)
 	}
-	manager := New(context.Background(), zap.NewNop(), db, accounts, cfg)
+	if err = configs.Set(context.Background(), configmanager.RuntimeSettingsKey, runtime); err != nil {
+		t.Fatal(err)
+	}
+	manager := New(context.Background(), zap.NewNop(), db, accounts, configs)
 	if err = manager.Init(); err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +46,7 @@ func ensureUsers(t *testing.T, accounts *account.Manager, ids ...int64) {
 }
 
 func TestAddListGetRemoveWithUserIsolation(t *testing.T) {
-	manager, _ := newTestManager(t, Config{BlockInternal: false})
+	manager, _ := newTestManager(t, configmanager.RuntimeSettings{MCPDefaultMaxTools: 32, MCPBlockInternal: false})
 	ctx := context.Background()
 
 	added, err := manager.Add(ctx, 1, "weather", "https://weather.example/sse", `{"timeout":30}`, `{"Authorization":"Bearer secret"}`)
@@ -81,7 +86,7 @@ func TestAddListGetRemoveWithUserIsolation(t *testing.T) {
 }
 
 func TestAddValidatesURLAndJSON(t *testing.T) {
-	manager, _ := newTestManager(t, Config{BlockInternal: true})
+	manager, _ := newTestManager(t, configmanager.RuntimeSettings{MCPDefaultMaxTools: 32, MCPBlockInternal: true})
 	ctx := context.Background()
 
 	tests := []struct {
@@ -117,7 +122,7 @@ func TestAddValidatesURLAndJSON(t *testing.T) {
 }
 
 func TestAddEnforcesProviderLimit(t *testing.T) {
-	manager, accounts := newTestManager(t, Config{DefaultMaxTools: 2, BlockInternal: false})
+	manager, accounts := newTestManager(t, configmanager.RuntimeSettings{MCPDefaultMaxTools: 2, MCPBlockInternal: false})
 	ctx := context.Background()
 	if _, err := manager.Add(ctx, 1, "a", "https://a.example/sse", "", ""); err != nil {
 		t.Fatal(err)
@@ -138,7 +143,7 @@ func TestAddEnforcesProviderLimit(t *testing.T) {
 }
 
 func TestValueAndSetValueViaJSONPath(t *testing.T) {
-	manager, _ := newTestManager(t, Config{BlockInternal: false})
+	manager, _ := newTestManager(t, configmanager.RuntimeSettings{MCPDefaultMaxTools: 32, MCPBlockInternal: false})
 	ctx := context.Background()
 	if _, err := manager.Add(ctx, 7, "git", "https://git.example/sse",
 		`{"timeout":30}`, `{"Authorization":"Bearer old"}`); err != nil {
@@ -190,7 +195,7 @@ func TestValueAndSetValueViaJSONPath(t *testing.T) {
 }
 
 func TestSetValueRevalidatesURL(t *testing.T) {
-	manager, _ := newTestManager(t, Config{BlockInternal: true})
+	manager, _ := newTestManager(t, configmanager.RuntimeSettings{MCPDefaultMaxTools: 32, MCPBlockInternal: true})
 	ctx := context.Background()
 	if _, err := manager.Add(ctx, 7, "git", "https://example.com/sse", "", ""); err != nil {
 		t.Fatal(err)
@@ -208,7 +213,7 @@ func TestSetValueRevalidatesURL(t *testing.T) {
 }
 
 func TestSetValueCanAddNestedHeader(t *testing.T) {
-	manager, _ := newTestManager(t, Config{BlockInternal: false})
+	manager, _ := newTestManager(t, configmanager.RuntimeSettings{MCPDefaultMaxTools: 32, MCPBlockInternal: false})
 	ctx := context.Background()
 	if _, err := manager.Add(ctx, 7, "git", "https://example.com/sse", "", ""); err != nil {
 		t.Fatal(err)
@@ -223,7 +228,7 @@ func TestSetValueCanAddNestedHeader(t *testing.T) {
 }
 
 func TestLoadCanBeCanceledWithChatState(t *testing.T) {
-	manager, _ := newTestManager(t, Config{BlockInternal: false})
+	manager, _ := newTestManager(t, configmanager.RuntimeSettings{MCPDefaultMaxTools: 32, MCPBlockInternal: false})
 	defer manager.Close()
 
 	gateStarted := make(chan struct{})
@@ -250,7 +255,7 @@ func TestLoadCanBeCanceledWithChatState(t *testing.T) {
 }
 
 func TestLoadRejectsClosedLoader(t *testing.T) {
-	manager, _ := newTestManager(t, Config{})
+	manager, _ := newTestManager(t, configmanager.RuntimeSettings{MCPDefaultMaxTools: 32, MCPBlockInternal: true})
 	manager.Close()
 	if _, err := manager.Load(context.Background(), 7, nil); !errors.Is(err, errs.ErrLoaderClosed) {
 		t.Fatalf("Load error = %v, want ErrLoaderClosed", err)
@@ -258,7 +263,7 @@ func TestLoadRejectsClosedLoader(t *testing.T) {
 }
 
 func TestLoadHonoursGate(t *testing.T) {
-	manager, _ := newTestManager(t, Config{BlockInternal: false})
+	manager, _ := newTestManager(t, configmanager.RuntimeSettings{MCPDefaultMaxTools: 32, MCPBlockInternal: false})
 	defer manager.Close()
 
 	deniedResult, deniedErr := manager.Load(context.Background(), 7, func(context.Context) (bool, error) {

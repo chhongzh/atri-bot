@@ -8,6 +8,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/character"
 	"github.com/chhongzh/atri-bot/internal/chat"
 	"github.com/chhongzh/atri-bot/internal/command"
+	configmanager "github.com/chhongzh/atri-bot/internal/config"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	"github.com/chhongzh/atri-bot/internal/session"
 	"github.com/chhongzh/atri-bot/internal/tools"
@@ -47,6 +48,7 @@ type Runner struct {
 	bot    *telebot.Bot
 
 	accounts   *account.Manager
+	configs    *configmanager.Manager
 	characters *character.Manager
 	chats      *chat.Manager
 	commands   *command.Manager
@@ -89,6 +91,10 @@ func (r *Runner) Bot() *telebot.Bot {
 
 func (r *Runner) AccountManager() *account.Manager {
 	return r.accounts
+}
+
+func (r *Runner) ConfigManager() *configmanager.Manager {
+	return r.configs
 }
 
 func (r *Runner) CharacterManager() *character.Manager {

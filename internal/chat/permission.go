@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	configmanager "github.com/chhongzh/atri-bot/internal/config"
 	"github.com/chhongzh/atri-bot/internal/model"
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/cloudwego/eino/components/tool"
@@ -54,7 +55,15 @@ type ToolPermissionInfo struct {
 
 // Init migrates the tool permission table.
 func (m *Manager) Init() error {
-	return m.db.AutoMigrate(&model.ToolPermission{})
+	if err := m.db.AutoMigrate(&model.ToolPermission{}); err != nil {
+		return err
+	}
+	runtime, err := m.configs.Query[configmanager.RuntimeSettings](context.Background(), configmanager.RuntimeSettingsKey)
+	if err != nil {
+		return err
+	}
+	m.defaultToolPermissions = normalizeDefaultToolPermissions(m.logger, m.tools, runtime.DefaultToolPermissions)
+	return nil
 }
 
 // SetToolPermission sets a per-user override for a tool.

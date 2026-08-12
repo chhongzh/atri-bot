@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	configmanager "github.com/chhongzh/atri-bot/internal/config"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -20,20 +21,27 @@ var (
 type Manager struct {
 	db               *gorm.DB
 	logger           *zap.Logger
+	configs          *configmanager.Manager
 	defaultMaxRounds int
 
 	createMu sync.Mutex
 }
 
-func New(db *gorm.DB, logger *zap.Logger, defaultMaxRounds int) *Manager {
+func New(db *gorm.DB, logger *zap.Logger, configs *configmanager.Manager, defaultMaxRounds int) *Manager {
 	if defaultMaxRounds <= 0 {
 		defaultMaxRounds = 36
 	}
-	return &Manager{db: db, logger: logger, defaultMaxRounds: defaultMaxRounds}
+	return &Manager{db: db, logger: logger, configs: configs, defaultMaxRounds: defaultMaxRounds}
 }
 
 func (m *Manager) Init() error {
-	return m.db.AutoMigrate(&User{})
+	if err := m.db.AutoMigrate(&User{}); err != nil {
+		return err
+	}
+	if err := m.configs.Init(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (m *Manager) EnsureUser(ctx context.Context, id int64, username, displayName string) (*User, bool, error) {
@@ -51,10 +59,6 @@ func (m *Manager) EnsureUser(ctx context.Context, id int64, username, displayNam
 		if user.DisplayName != displayName {
 			updates["display_name"] = displayName
 			user.DisplayName = displayName
-		}
-		if user.AIMaxRounds <= 0 {
-			updates["ai_max_rounds"] = m.defaultMaxRounds
-			user.AIMaxRounds = m.defaultMaxRounds
 		}
 		if len(updates) > 0 {
 			if err = m.db.WithContext(ctx).Model(&user).Updates(updates).Error; err != nil {
@@ -81,11 +85,13 @@ func (m *Manager) EnsureUser(ctx context.Context, id int64, username, displayNam
 			Username:    username,
 			DisplayName: displayName,
 			Role:        role,
-			AIMaxRounds: m.defaultMaxRounds,
 		}
 		return tx.Create(&user).Error
 	})
 	if err != nil {
+		return nil, false, err
+	}
+	if err = m.configs.SetUser(ctx, id, configmanager.UserSettingsKey, configmanager.UserSettings{AIMaxRounds: m.defaultMaxRounds}); err != nil {
 		return nil, false, err
 	}
 
@@ -103,6 +109,24 @@ func (m *Manager) Get(ctx context.Context, id int64) (*User, error) {
 		return nil, ErrUserNotFound
 	}
 	return &user, err
+}
+
+func (m *Manager) Settings(ctx context.Context, id int64) (configmanager.UserSettings, error) {
+	settings, err := m.configs.QueryUser[configmanager.UserSettings](ctx, id, configmanager.UserSettingsKey)
+	if errors.Is(err, configmanager.ErrNotFound) {
+		return configmanager.UserSettings{AIMaxRounds: m.defaultMaxRounds}, nil
+	}
+	return settings, err
+}
+
+func (m *Manager) SetSettings(ctx context.Context, id int64, settings configmanager.UserSettings) error {
+	if settings.AIMaxRounds <= 0 {
+		return errors.New("AI max rounds must be positive")
+	}
+	if _, err := m.Get(ctx, id); err != nil {
+		return err
+	}
+	return m.configs.SetUser(ctx, id, configmanager.UserSettingsKey, settings)
 }
 
 func (m *Manager) IsAdmin(ctx context.Context, id int64) (bool, error) {
@@ -184,42 +208,48 @@ func (m *Manager) Delete(ctx context.Context, actorID, targetID int64) error {
 }
 
 func (m *Manager) SetCharacter(ctx context.Context, id int64, characterID string) error {
-	result := m.db.WithContext(ctx).Model(&User{}).
-		Where("telegram_id = ?", id).
-		Update("character_id", characterID)
-	if result.Error != nil {
-		return result.Error
+	settings, err := m.Settings(ctx, id)
+	if err != nil {
+		return err
 	}
-	if result.RowsAffected == 0 {
-		return ErrUserNotFound
-	}
-	return nil
+	settings.CharacterID = characterID
+	return m.SetSettings(ctx, id, settings)
 }
 
 func (m *Manager) SetAIBaseURL(ctx context.Context, id int64, value string) error {
-	return m.updateUserField(ctx, id, "ai_base_url", value)
+	settings, err := m.Settings(ctx, id)
+	if err != nil {
+		return err
+	}
+	settings.AIBaseURL = value
+	return m.SetSettings(ctx, id, settings)
 }
 
 func (m *Manager) SetAIAPIKey(ctx context.Context, id int64, value string) error {
-	return m.updateUserField(ctx, id, "ai_api_key", value)
+	settings, err := m.Settings(ctx, id)
+	if err != nil {
+		return err
+	}
+	settings.AIAPIKey = value
+	return m.SetSettings(ctx, id, settings)
 }
 
 func (m *Manager) SetAIModel(ctx context.Context, id int64, value string) error {
-	return m.updateUserField(ctx, id, "ai_model", value)
+	settings, err := m.Settings(ctx, id)
+	if err != nil {
+		return err
+	}
+	settings.AIModel = value
+	return m.SetSettings(ctx, id, settings)
 }
 
 func (m *Manager) SetAIMaxRounds(ctx context.Context, id int64, value int) error {
-	if value <= 0 {
-		return errors.New("AI max rounds must be positive")
+	settings, err := m.Settings(ctx, id)
+	if err != nil {
+		return err
 	}
-	result := m.db.WithContext(ctx).Model(&User{}).Where("telegram_id = ?", id).Update("ai_max_rounds", value)
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return ErrUserNotFound
-	}
-	return nil
+	settings.AIMaxRounds = value
+	return m.SetSettings(ctx, id, settings)
 }
 
 // SetMCPMaxTools sets a per-user override for the MCP provider limit.
@@ -239,8 +269,16 @@ func (m *Manager) SetMCPMaxTools(ctx context.Context, actorID, targetID int64, v
 			}
 			return err
 		}
-		return tx.Model(&target).Update("mcp_max_tools", value).Error
+		return nil
 	}); err != nil {
+		return err
+	}
+	settings, err := m.Settings(ctx, targetID)
+	if err != nil {
+		return err
+	}
+	settings.MCPMaxTools = value
+	if err = m.configs.SetUser(ctx, targetID, configmanager.UserSettingsKey, settings); err != nil {
 		return err
 	}
 	m.logger.Info("updated user mcp provider limit",
@@ -265,8 +303,16 @@ func (m *Manager) SetMCPBlockInternal(ctx context.Context, actorID, targetID int
 			}
 			return err
 		}
-		return tx.Model(&target).Update("mcp_block_internal", value).Error
+		return nil
 	}); err != nil {
+		return err
+	}
+	settings, err := m.Settings(ctx, targetID)
+	if err != nil {
+		return err
+	}
+	settings.MCPBlockInternal = value
+	if err = m.configs.SetUser(ctx, targetID, configmanager.UserSettingsKey, settings); err != nil {
 		return err
 	}
 	fields := []zap.Field{zap.Int64("actor_id", actorID), zap.Int64("user_id", targetID)}
@@ -336,17 +382,6 @@ func (m *Manager) Stats(ctx context.Context) (*Stats, error) {
 		return nil, err
 	}
 	return stats, nil
-}
-
-func (m *Manager) updateUserField(ctx context.Context, id int64, field, value string) error {
-	result := m.db.WithContext(ctx).Model(&User{}).Where("telegram_id = ?", id).Update(field, value)
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return ErrUserNotFound
-	}
-	return nil
 }
 
 func requireAdmin(tx *gorm.DB, id int64) error {

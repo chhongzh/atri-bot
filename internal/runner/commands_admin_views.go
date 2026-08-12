@@ -94,7 +94,12 @@ func (r *Runner) commandUser(c telebot.Context, args []string) {
 	if active, ok := findActiveUser(r.chats.ActiveUsers(), targetID); ok {
 		chatStatus = "活跃，最近活动：" + formatAccountTime(active.LastActiveAt)
 	}
-	characterID := user.CharacterID
+	settings, err := r.accounts.Settings(ctx, targetID)
+	if err != nil {
+		r.commandError(c, err)
+		return
+	}
+	characterID := settings.CharacterID
 	if characterID == "" {
 		characterID = "未选择"
 	}
@@ -103,10 +108,10 @@ func (r *Runner) commandUser(c telebot.Context, args []string) {
 		formatAccountUser(*user),
 		characterID,
 		chatStatus,
-		configurationState(user.AIBaseURL),
-		configurationState(user.AIAPIKey),
-		configurationState(user.AIModel),
-		user.AIMaxRounds,
+		configurationState(settings.AIBaseURL),
+		configurationState(settings.AIAPIKey),
+		configurationState(settings.AIModel),
+		settings.AIMaxRounds,
 		formatAccountTime(user.CreatedAt),
 		formatAccountTime(user.UpdatedAt),
 	))

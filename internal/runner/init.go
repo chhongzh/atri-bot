@@ -9,6 +9,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/character"
 	"github.com/chhongzh/atri-bot/internal/chat"
 	"github.com/chhongzh/atri-bot/internal/command"
+	configmanager "github.com/chhongzh/atri-bot/internal/config"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	"github.com/chhongzh/atri-bot/internal/session"
 	"github.com/chhongzh/atri-bot/internal/tools"
@@ -22,14 +23,20 @@ func (r *Runner) Init(ctx context.Context) error {
 		return err
 	}
 
-	r.accounts = account.New(r.db, r.logger, r.cfg.DefaultMaxRounds)
+	r.configs = configmanager.New(r.db)
+	r.accounts = account.New(r.db, r.logger, r.configs, r.cfg.DefaultMaxRounds)
 	if err := r.accounts.Init(); err != nil {
 		return err
 	}
-	r.mcp = mcpmanager.New(context.WithoutCancel(ctx), r.logger, r.db, r.accounts, mcpmanager.Config{
-		DefaultMaxTools: r.cfg.MCPDefaultMaxTools,
-		BlockInternal:   r.cfg.MCPBlockInternal,
-	})
+	if err := r.configs.Set(ctx, configmanager.RuntimeSettingsKey, configmanager.RuntimeSettings{
+		DefaultMaxRounds:       r.cfg.DefaultMaxRounds,
+		DefaultToolPermissions: r.cfg.DefaultToolPermissions,
+		MCPDefaultMaxTools:     r.cfg.MCPDefaultMaxTools,
+		MCPBlockInternal:       r.cfg.MCPBlockInternal,
+	}); err != nil {
+		return err
+	}
+	r.mcp = mcpmanager.New(context.WithoutCancel(ctx), r.logger, r.db, r.accounts, r.configs)
 	if err := r.mcp.Init(); err != nil {
 		return err
 	}
@@ -58,12 +65,11 @@ func (r *Runner) Init(ctx context.Context) error {
 	if err := r.characters.Init(ctx); err != nil {
 		return err
 	}
-	r.chats = chat.New(context.WithoutCancel(ctx), r.logger, r.db, r.accounts, r.characters, r.sessions, r.tools, r.mcp, chat.Config{
-		StateTTL:               r.cfg.StateTTL,
-		ModelTimeout:           r.cfg.AIModelTimeout,
-		DefaultToolPermissions: r.cfg.DefaultToolPermissions,
-		SendLoadingResult:      r.sendLoadingResultAndDelete,
-		OnMessageSent:          r.onMessageSent,
+	r.chats = chat.New(context.WithoutCancel(ctx), r.logger, r.db, r.accounts, r.configs, r.characters, r.sessions, r.tools, r.mcp, chat.Config{
+		StateTTL:          r.cfg.StateTTL,
+		ModelTimeout:      r.cfg.AIModelTimeout,
+		SendLoadingResult: r.sendLoadingResultAndDelete,
+		OnMessageSent:     r.onMessageSent,
 	})
 	if err := r.chats.Init(); err != nil {
 		return err

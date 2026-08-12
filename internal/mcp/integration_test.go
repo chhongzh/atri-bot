@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	configmanager "github.com/chhongzh/atri-bot/internal/config"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -42,7 +43,7 @@ func newIntegrationMCPServer() *server.MCPServer {
 
 func testLoadLoadsRealMCPServer(t *testing.T, endpoint string) {
 	t.Helper()
-	manager, _ := newTestManager(t, Config{BlockInternal: false})
+	manager, _ := newTestManager(t, configmanager.RuntimeSettings{MCPDefaultMaxTools: 32, MCPBlockInternal: false})
 	defer manager.Close()
 
 	ctx := context.Background()
