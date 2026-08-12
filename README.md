@@ -124,7 +124,6 @@ mcp:
 - `/ai show|base-url|key|model|rounds [值]` 查看或修改自己的 AI 配置。
 - `/characters` 列出所有可用角色。
 - `/character <角色ID>` 查看详情或切换角色。
-- `/session-clear` 清空当前角色的会话历史。
 - `/toolperm list|allow|deny|reset <用户ID> [工具名]` 管理员管理用户的工具权限。
 - `/mcp show|limit <用户ID> [值]` 管理员管理用户的 MCP 工具数量上限。
 - `/providers`、`/provider add|set|remove|refresh` 管理员管理角色来源。

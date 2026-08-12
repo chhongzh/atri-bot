@@ -18,7 +18,7 @@ func (r *Runner) registerCharacterCommands() error {
 	if err := r.commands.Register("character", "查看或切换角色", "character", "/character [character-id]", r.commandCharacter); err != nil {
 		return err
 	}
-	return r.commands.Register("character", "清空当前角色会话", "session-clear", "/session-clear", r.commandSessionClear)
+	return nil
 }
 
 func (r *Runner) commandCharacters(c telebot.Context, _ []string) {
@@ -63,24 +63,4 @@ func (r *Runner) commandCharacter(c telebot.Context, args []string) {
 	}
 	r.chats.Invalidate(sender.ID)
 	_ = r.sendSystemResultAndDelete(c, "已切换角色为 "+characterID+"。")
-}
-
-func (r *Runner) commandSessionClear(c telebot.Context, _ []string) {
-	sender := c.Sender()
-	ctx := context.Background()
-	settings, err := r.accounts.Settings(ctx, sender.ID)
-	if err != nil {
-		r.commandError(c, err)
-		return
-	}
-	if settings.CharacterID == "" {
-		r.commandError(c, fmt.Errorf("尚未选择角色"))
-		return
-	}
-	if err = r.sessions.Clear(ctx, sender.ID, settings.CharacterID); err != nil {
-		r.commandError(c, err)
-		return
-	}
-	r.chats.Invalidate(sender.ID)
-	_ = r.sendSystemResultAndDelete(c, "当前角色的会话已清空。")
 }
