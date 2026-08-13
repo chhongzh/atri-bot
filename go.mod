@@ -22,12 +22,14 @@ require (
 	golang.org/x/net v0.57.0
 	gopkg.in/telebot.v4 v4.0.0-beta.10
 	gopkg.in/yaml.v3 v3.0.1
+	gorm.io/driver/mysql v1.6.0
 	gorm.io/gorm v1.31.2
 	resty.dev/v3 v3.0.0-rc.3
 )
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.1.6 // indirect
 	github.com/antchfx/xpath v1.3.6 // indirect
@@ -49,6 +51,7 @@ require (
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.9.0 // indirect
 	github.com/go-rod/rod v0.116.2 // indirect
+	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect

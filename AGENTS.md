@@ -123,7 +123,7 @@
 
 - local provider 永远存在，根目录固定为 `<CWD>/chardefs`，且不能作为普通远程 provider 删除。
 - remote provider 使用 `go-git` 克隆和更新，运行缓存位于 `<CWD>/data/character-providers/`。
-- 默认远程仓库为 `https://github.com/mihari-bot/chardef`，默认分支为 `v2`；上游可通过 runner 配置覆盖。
+- 默认远程仓库为 `https://github.com/mihari-bot/chardef`，默认分支为 `main`，仓库与分支在代码中硬编码，不提供配置覆盖。
 - 角色文件为 `<character-id>.yaml` 或 `.yml`，角色 ID 使用类似 Android 包名的稳定 ID，例如 `dev.chhongzh.atri`。
 - 角色 YAML 遵循项目约定的 chardef schema；加载后保持为 `map[string]any`，避免为未知扩展字段制造僵硬结构。
 - 所有 provider 的角色统一由 character manager 查询；重复角色 ID 按确定的 provider 加载顺序处理并记录警告。
@@ -140,25 +140,32 @@
 telegram:
   bot_token: "..."
 
-bot:
-  max_rounds: 36
+# 新用户默认值
+default:
+  max_rounds: 36            # 新用户会话轮数上限
+  mcp_max_tools: 128        # 每用户 MCP provider 上限，管理员可用 /mcp limit 单独覆盖
+  tool_permissions: {}      # 新用户工具默认权限
 
-# 可选
+# 网络安全
+security:
+  allow_private_ip: false   # 是否允许访问 localhost、内网域名和私网地址
+
+# 数据库
+database:
+  type: sqlite              # sqlite 或 mysql
+  path: "atri-bot.db"       # sqlite 文件路径，相对 atri_cwd
+  dsn: ""                   # mysql 连接串，type=mysql 时必填
+
+# 外部服务
+external:
+  browser_url: ""           # 配置后启用 web_read 工具，例如 127.0.0.1:9222
+
+# 数据根目录
 atri_cwd: "."
-character_repository_url: "https://github.com/mihari-bot/chardef"
-character_repository_branch: "v2"
-
-# MCP 外部工具（可选）
-mcp:
-  max_tools: 128        # 每用户 MCP provider 上限，管理员可用 /mcp limit 单独覆盖
-
-# 用户配置的 MCP、AI、工具网络出口（可选）
-network:
-  allow_private_ip: false # 是否允许访问 localhost/.internal/私网地址
 ```
 
-- `bot.max_rounds` 只决定新用户的初始轮数，不是共享模型配置。
-- `mcp.max_tools` 为每用户默认 provider 上限，可由管理员通过 `/mcp limit` 单独调整；`network.allow_private_ip` 统一控制用户配置网络出口能否访问内网，`/toolperm deny <user-id> mcp` 可一键禁用该用户的全部 MCP 能力。
+- `default.max_rounds` 只决定新用户的初始轮数，不是共享模型配置。
+- `default.mcp_max_tools` 为每用户默认 provider 上限，可由管理员通过 `/mcp limit` 单独调整；`security.allow_private_ip` 统一控制用户配置网络出口能否访问内网，`/toolperm deny <user-id> mcp` 可一键禁用该用户的全部 MCP 能力。
 - 不得新增全局 `ai_base_url`、`ai_key` 或 `ai_model` 默认项。
 - 不提交真实 Token、API Key、SMTP 凭据、数据库文件或远程仓库缓存。
 

@@ -2,15 +2,12 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/chhongzh/atri-bot/internal/runner"
 	"github.com/chhongzh/atri-bot/internal/security"
-	"github.com/chhongzh/atri-bot/internal/session"
 	"github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/chhongzh/atri-bot/internal/tools/email"
 	"github.com/chhongzh/atri-bot/internal/tools/hotspot"
@@ -18,10 +15,10 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
-	"github.com/spf13/viper"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
+	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"resty.dev/v3"
 )
@@ -45,22 +42,6 @@ func main() {
 	app.Run()
 }
 
-type config struct {
-	botToken               string
-	characterRepoURL       string
-	characterRepoBranch    string
-	cwd                    string
-	defaultMaxRounds       int
-	defaultToolPermissions map[string]bool
-	allowPrivateIP         bool
-	mcpDefaultMaxTools     int
-	webreadBrowserURL      string
-}
-
-type toolsConfig struct {
-	DefaultPermissions map[string]bool `mapstructure:"default_permissions"`
-}
-
 func getLogger() (*zap.Logger, error) {
 	cfg := zap.NewProductionConfig()
 	cfg.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
@@ -68,74 +49,30 @@ func getLogger() (*zap.Logger, error) {
 	return cfg.Build()
 }
 
-func getConfig() (*config, error) {
-	v := viper.New()
-	v.SetConfigName("config")
-	v.SetConfigType("yaml")
-	v.AddConfigPath(".")
-
-	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("read configuration: %w", err)
-	}
-
-	defaultMaxRounds := session.DefaultMaxRounds
-	if v.IsSet("bot.max_rounds") {
-		defaultMaxRounds = v.GetInt("bot.max_rounds")
-		if defaultMaxRounds <= 0 {
-			return nil, fmt.Errorf("configuration bot.max_rounds must be positive")
+func getDB(cfg *Config) (*gorm.DB, error) {
+	switch cfg.Database.Type {
+	case "mysql":
+		return gorm.Open(mysql.Open(cfg.Database.DSN))
+	default: // sqlite
+		root := cfg.CWD
+		if root == "" {
+			root = "."
 		}
-	}
-	var toolsCfg toolsConfig
-	if err := v.UnmarshalKey("tools", &toolsCfg); err != nil {
-		return nil, fmt.Errorf("configuration tools: %w", err)
-	}
-
-	mcpDefaultMaxTools := 128
-	if v.IsSet("mcp.max_tools") {
-		mcpDefaultMaxTools = v.GetInt("mcp.max_tools")
-		if mcpDefaultMaxTools <= 0 {
-			return nil, fmt.Errorf("configuration mcp.max_tools must be positive")
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			return nil, err
 		}
-	}
-	allowPrivateIP := v.GetBool("network.allow_private_ip")
 
-	webreadBrowserURL := ""
-	if v.IsSet("webread.browser_url") {
-		webreadBrowserURL = strings.TrimSpace(v.GetString("webread.browser_url"))
+		path := cfg.Database.Path
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(root, path)
+		}
+		return gorm.Open(sqlite.Open(path))
 	}
-
-	cfg := &config{
-		botToken:               v.GetString("telegram.bot_token"),
-		characterRepoURL:       v.GetString("character_repository_url"),
-		characterRepoBranch:    v.GetString("character_repository_branch"),
-		cwd:                    v.GetString("atri_cwd"),
-		defaultMaxRounds:       defaultMaxRounds,
-		defaultToolPermissions: toolsCfg.DefaultPermissions,
-		allowPrivateIP:         allowPrivateIP,
-		mcpDefaultMaxTools:     mcpDefaultMaxTools,
-		webreadBrowserURL:      webreadBrowserURL,
-	}
-	if cfg.botToken == "" {
-		return nil, fmt.Errorf("required configuration telegram.bot_token is missing")
-	}
-
-	return cfg, nil
 }
 
-func getDB(cfg *config) (*gorm.DB, error) {
-	root := cfg.cwd
-	if root == "" {
-		root = "."
-	}
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		return nil, err
-	}
-	return gorm.Open(sqlite.Open(filepath.Join(root, "atri-bot.db")))
-}
-
-func getRunner(logger *zap.Logger, restyClient *resty.Client, browser *rod.Browser, cfg *config, db *gorm.DB) *runner.Runner {
+func getRunner(logger *zap.Logger, restyClient *resty.Client, browser *rod.Browser, cfg *Config, db *gorm.DB) *runner.Runner {
 	registrars := []tools.Registrar{
-		email.BindedRegister(cfg.allowPrivateIP),
+		email.BindedRegister(cfg.Security.AllowPrivateIP),
 		hotspot.BindedRegister(logger, restyClient),
 	}
 	if browser != nil {
@@ -143,32 +80,32 @@ func getRunner(logger *zap.Logger, restyClient *resty.Client, browser *rod.Brows
 	}
 
 	return runner.New(logger, &runner.Config{
-		BotToken:               cfg.botToken,
-		CWD:                    cfg.cwd,
-		CharacterRepositoryURL: cfg.characterRepoURL,
-		CharacterBranch:        cfg.characterRepoBranch,
-		DefaultMaxRounds:       cfg.defaultMaxRounds,
-		DefaultToolPermissions: cfg.defaultToolPermissions,
-		MCPDefaultMaxTools:     cfg.mcpDefaultMaxTools,
-		AllowPrivateIP:         cfg.allowPrivateIP,
+		BotToken:               cfg.Telegram.BotToken,
+		CWD:                    cfg.CWD,
+		CharacterRepositoryURL: runner.DefaultCharacterRepositoryURL,
+		CharacterBranch:        runner.DefaultCharacterBranch,
+		DefaultMaxRounds:       cfg.Default.MaxRounds,
+		DefaultToolPermissions: cfg.Default.ToolPermissions,
+		MCPDefaultMaxTools:     cfg.Default.MCPMaxTools,
+		AllowPrivateIP:         cfg.Security.AllowPrivateIP,
 		ToolRegistrars:         registrars,
 	}, db)
 }
 
-func getRestyClient(cfg *config) *resty.Client {
+func getRestyClient(cfg *Config) *resty.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	client := resty.New().
-		SetTransport(security.NewSafeHTTPTransport(transport, cfg.allowPrivateIP)).
+		SetTransport(security.NewSafeHTTPTransport(transport, cfg.Security.AllowPrivateIP)).
 		SetHeader("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36")
 	return client
 }
 
-func getRod(cfg *config) (*rod.Browser, error) {
-	if cfg.webreadBrowserURL == "" {
+func getRod(cfg *Config) (*rod.Browser, error) {
+	if cfg.External.BrowserURL == "" {
 		return nil, nil
 	}
 
-	resolvedURL, err := launcher.ResolveURL(cfg.webreadBrowserURL)
+	resolvedURL, err := launcher.ResolveURL(cfg.External.BrowserURL)
 	if err != nil {
 		return nil, err
 	}

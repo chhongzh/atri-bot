@@ -75,17 +75,28 @@ go build -o atri-bot ./cmd/atri-bot
 telegram:
   bot_token: "你的 bot token"
 
-bot:
-  max_rounds: 36
+# 新用户默认值
+default:
+  max_rounds: 36            # 新用户会话轮数上限
+  mcp_max_tools: 128        # 每用户 MCP provider 上限
+  tool_permissions: {}      # 新用户工具默认权限
 
-# 可选配置
+# 网络安全
+security:
+  allow_private_ip: false   # 是否允许访问 localhost、内网域名和私网 IP
+
+# 数据库
+database:
+  type: sqlite              # sqlite 或 mysql
+  path: "atri-bot.db"       # sqlite 文件路径，相对 atri_cwd
+  # dsn: "user:pass@tcp(127.0.0.1:3306)/atri?charset=utf8mb4&parseTime=True&loc=Local"  # mysql 连接串
+
+# 外部服务
+external:
+  browser_url: ""           # 配置后启用 web_read 工具，例如 127.0.0.1:9222
+
+# 数据根目录
 atri_cwd: "."
-character_repository_url: "https://github.com/mihari-bot/chardef"
-character_repository_branch: "v2"
-
-mcp:
-  max_tools: 128
-  block_internal: true
 ```
 
 4. 运行。
@@ -107,12 +118,15 @@ mcp:
 各项配置的含义如下。
 
 - `telegram.bot_token` 必填，机器人的 token。
-- `bot.max_rounds` 新用户压缩会话历史前保留的完整 Telegram 轮数，之后每个用户可以用 `/ai rounds` 单独修改。一次 TurnLoop 从收到的一组 user 消息开始，包含其间所有 assistant、tool call 和 tool result，直到最终 assistant 回复结束，整体计为一轮。达到上限后会先阻塞新一轮，用该用户自己的模型生成带 cutoff 的 system history；原始轮次继续保留，后续加载只读取最新 system history 与 cutoff 之后的新轮次。
-- `atri_cwd` 数据和本地角色的根目录，默认当前目录。数据库 `atri-bot.db` 和远程角色缓存都放在这里。
-- `character_repository_url` 和 `character_repository_branch` 默认角色仓库和分支。
-- `mcp.max_tools` 每个用户可添加的 MCP provider 上限，默认 128。
-- `network.allow_private_ip` 是否允许用户配置的网络出口访问 localhost、内网域名和私网 IP，默认 false。
-- `webread.browser_url` 启用网页读取工具 `web_read` 所需的浏览器调试地址，例如 `127.0.0.1:9222`；未配置时不注册该工具。
+- `default.max_rounds` 新用户压缩会话历史前保留的完整 Telegram 轮数，之后每个用户可以用 `/ai rounds` 单独修改。一次 TurnLoop 从收到的一组 user 消息开始，包含其间所有 assistant、tool call 和 tool result，直到最终 assistant 回复结束，整体计为一轮。达到上限后会先阻塞新一轮，用该用户自己的模型生成带 cutoff 的 system history；原始轮次继续保留，后续加载只读取最新 system history 与 cutoff 之后的新轮次。
+- `default.mcp_max_tools` 每个用户可添加的 MCP provider 上限，默认 128，管理员可用 `/mcp limit` 单独覆盖。
+- `default.tool_permissions` 新用户的默认工具权限映射。
+- `security.allow_private_ip` 是否允许用户配置的网络出口访问 localhost、内网域名和私网 IP，默认 false。
+- `database.type` 数据库类型，`sqlite`（默认）或 `mysql`。
+- `database.path` sqlite 数据库文件路径，相对 `atri_cwd`，默认 `atri-bot.db`。
+- `database.dsn` mysql 连接串，`type: mysql` 时必填。
+- `external.browser_url` 启用网页读取工具 `web_read` 所需的浏览器调试地址，例如 `127.0.0.1:9222`；未配置时不注册该工具。
+- `atri_cwd` 数据和本地角色的根目录，默认当前目录。数据库文件和远程角色缓存都放在这里。
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
@@ -148,7 +162,7 @@ MCP 是当前工具能力的重点。角色通过 MCP 协议调用外部服务�
 /toolperm reset <用户ID> mcp
 ```
 
-管理员可以单独覆盖某个用户的 provider 上限；网络访问范围由全局 `network.allow_private_ip` 统一控制。
+管理员可以单独覆盖某个用户的 provider 上限；网络访问范围由全局 `security.allow_private_ip` 统一控制。
 
 ```text
 /mcp show <用户ID>
