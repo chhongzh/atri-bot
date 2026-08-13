@@ -6,9 +6,9 @@ import (
 	"time"
 
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
+	"github.com/chhongzh/atri-bot/internal/tools/webread/stealth"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
-	"github.com/go-rod/stealth"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -55,13 +55,21 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 		}
 	}(page)
 
-	remove, err := page.EvalOnNewDocument(stealth.JS)
+	remove, err := stealth.Inject(page)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to install stealth script")
+	}
 	defer func(remove func() error) {
 		err := remove()
 		if err != nil {
 			logger.Warn("failed to remove eval", zap.Error(err))
 		}
 	}(remove)
+
+	err = page.Navigate(input.URL)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to navigate to URL")
+	}
 
 	err = page.WaitDOMStable(time.Millisecond*500, 0.75)
 	if err != nil {
