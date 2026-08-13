@@ -8,6 +8,7 @@ import (
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
+	"github.com/go-rod/stealth"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -43,7 +44,7 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 	ctx, cancel := context.WithTimeout(ctx, time.Second*300)
 	defer cancel()
 
-	page, err := browser.Context(ctx).Page(proto.TargetCreateTarget{URL: input.URL})
+	page, err := browser.Context(ctx).Page(proto.TargetCreateTarget{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open blank page")
 	}
@@ -53,6 +54,14 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 			logger.Warn("failed to close page, this may cause leakage!", zap.Error(err))
 		}
 	}(page)
+
+	remove, err := page.EvalOnNewDocument(stealth.JS)
+	defer func(remove func() error) {
+		err := remove()
+		if err != nil {
+			logger.Warn("failed to remove eval", zap.Error(err))
+		}
+	}(remove)
 
 	err = page.WaitDOMStable(time.Millisecond*500, 0.75)
 	if err != nil {
