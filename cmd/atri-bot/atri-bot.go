@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/chhongzh/atri-bot/internal/runner"
 	"github.com/chhongzh/atri-bot/internal/security"
@@ -13,7 +14,10 @@ import (
 	"github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/chhongzh/atri-bot/internal/tools/email"
 	"github.com/chhongzh/atri-bot/internal/tools/hotspot"
+	"github.com/chhongzh/atri-bot/internal/tools/webread"
 	"github.com/glebarez/sqlite"
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/launcher"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
@@ -28,6 +32,7 @@ func main() {
 		fx.Provide(getLogger),
 		fx.Provide(getDB),
 		fx.Provide(getRestyClient),
+		fx.Provide(getRod),
 		fx.Provide(getRunner),
 
 		fx.WithLogger(func(log *zap.Logger) fxevent.Logger {
@@ -49,6 +54,7 @@ type config struct {
 	defaultToolPermissions map[string]bool
 	allowPrivateIP         bool
 	mcpDefaultMaxTools     int
+	webreadBrowserURL      string
 }
 
 type toolsConfig struct {
@@ -93,6 +99,11 @@ func getConfig() (*config, error) {
 	}
 	allowPrivateIP := v.GetBool("network.allow_private_ip")
 
+	webreadBrowserURL := ""
+	if v.IsSet("webread.browser_url") {
+		webreadBrowserURL = strings.TrimSpace(v.GetString("webread.browser_url"))
+	}
+
 	cfg := &config{
 		botToken:               v.GetString("telegram.bot_token"),
 		characterRepoURL:       v.GetString("character_repository_url"),
@@ -102,6 +113,7 @@ func getConfig() (*config, error) {
 		defaultToolPermissions: toolsCfg.DefaultPermissions,
 		allowPrivateIP:         allowPrivateIP,
 		mcpDefaultMaxTools:     mcpDefaultMaxTools,
+		webreadBrowserURL:      webreadBrowserURL,
 	}
 	if cfg.botToken == "" {
 		return nil, fmt.Errorf("required configuration telegram.bot_token is missing")
@@ -121,7 +133,15 @@ func getDB(cfg *config) (*gorm.DB, error) {
 	return gorm.Open(sqlite.Open(filepath.Join(root, "atri-bot.db")))
 }
 
-func getRunner(logger *zap.Logger, restyClient *resty.Client, cfg *config, db *gorm.DB) *runner.Runner {
+func getRunner(logger *zap.Logger, restyClient *resty.Client, browser *rod.Browser, cfg *config, db *gorm.DB) *runner.Runner {
+	registrars := []tools.Registrar{
+		email.BindedRegister(cfg.allowPrivateIP),
+		hotspot.BindedRegister(logger, restyClient),
+	}
+	if browser != nil {
+		registrars = append(registrars, webread.BindedRegister(logger, browser))
+	}
+
 	return runner.New(logger, &runner.Config{
 		BotToken:               cfg.botToken,
 		CWD:                    cfg.cwd,
@@ -131,11 +151,7 @@ func getRunner(logger *zap.Logger, restyClient *resty.Client, cfg *config, db *g
 		DefaultToolPermissions: cfg.defaultToolPermissions,
 		MCPDefaultMaxTools:     cfg.mcpDefaultMaxTools,
 		AllowPrivateIP:         cfg.allowPrivateIP,
-
-		ToolRegistrars: []tools.Registrar{
-			email.BindedRegister(cfg.allowPrivateIP),
-			hotspot.BindedRegister(logger, restyClient),
-		},
+		ToolRegistrars:         registrars,
 	}, db)
 }
 
@@ -145,6 +161,25 @@ func getRestyClient(cfg *config) *resty.Client {
 		SetTransport(security.NewSafeHTTPTransport(transport, cfg.allowPrivateIP)).
 		SetHeader("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36")
 	return client
+}
+
+func getRod(cfg *config) (*rod.Browser, error) {
+	if cfg.webreadBrowserURL == "" {
+		return nil, nil
+	}
+
+	resolvedURL, err := launcher.ResolveURL(cfg.webreadBrowserURL)
+	if err != nil {
+		return nil, err
+	}
+
+	b := rod.New().ControlURL(resolvedURL)
+
+	if err := b.Connect(); err != nil {
+		return nil, err
+	}
+
+	return b, nil
 }
 
 func run(r *runner.Runner, lc fx.Lifecycle) {

@@ -112,6 +112,7 @@ mcp:
 - `character_repository_url` 和 `character_repository_branch` 默认角色仓库和分支。
 - `mcp.max_tools` 每个用户可添加的 MCP provider 上限，默认 128。
 - `network.allow_private_ip` 是否允许用户配置的网络出口访问 localhost、内网域名和私网 IP，默认 false。
+- `webread.browser_url` 启用网页读取工具 `web_read` 所需的浏览器调试地址，例如 `127.0.0.1:9222`；未配置时不注册该工具。
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
