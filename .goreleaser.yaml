@@ -19,9 +19,9 @@ builds:
     goarch:
       - amd64
       - arm64
-    # go build -x：在 CI 日志中显示编译进度
-    
-      
+      # go build -x：在 CI 日志中显示编译进度
+
+
 
   - id: android-arm64
     # Android arm64 不需要 CGO，可直接交叉编译。
@@ -33,8 +33,8 @@ builds:
     goarch:
       - arm64
     # go build -x：在 CI 日志中显示编译进度
-    
-    
+
+
 
   - id: android-amd64
     # Go 对 android/amd64 要求外部链接，使用 NDK clang。
@@ -47,13 +47,13 @@ builds:
     goarch:
       - amd64
     # go build -x：在 CI 日志中显示编译进度
-    
-    
+
+
 
 archives:
   - id: desktop
-    ids: [desktop]
-    formats: [tar.gz]
+    ids: [ desktop ]
+    formats: [ tar.gz ]
     # this name template makes the OS and Arch compatible with the results of `uname`.
     name_template: >-
       {{ .ProjectName }}_
@@ -65,12 +65,12 @@ archives:
     # use zip for windows archives
     format_overrides:
       - goos: windows
-        formats: [zip]
+        formats: [ zip ]
 
   - id: android
-    ids: [android-arm64, android-amd64]
+    ids: [ android-arm64, android-amd64 ]
     # Android 不打压缩包，直接发布可执行文件
-    formats: [binary]
+    formats: [ binary ]
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
 
 changelog:

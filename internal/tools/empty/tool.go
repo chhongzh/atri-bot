@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 // Package empty 提供了一个空的tool的代码模板
 package empty
 

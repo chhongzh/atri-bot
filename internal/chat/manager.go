@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package chat
 
 import (
@@ -13,7 +16,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/account"
 	"github.com/chhongzh/atri-bot/internal/character"
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
-	errs "github.com/chhongzh/atri-bot/internal/errs"
+	"github.com/chhongzh/atri-bot/internal/errs"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	"github.com/chhongzh/atri-bot/internal/msgops"
 	"github.com/chhongzh/atri-bot/internal/security"

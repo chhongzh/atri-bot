@@ -41,7 +41,8 @@
 - 不重复造轮子。已有第三方库或仓库内抽象可满足需求时直接复用。
 - 只有被多个包复用的通用逻辑才放入 `internal/utils/`；仅服务单包的 helper 留在该包内。
 - 不新增无意义的全局状态。manager 通过构造函数接收依赖，顶层依赖由 Fx 和 `runner` 组合。
-- 内部函数信任仓库内调用方，不对依赖、回调或已校验参数重复做 `nil`、空字符串等防御性检查；只在 Telegram middleware/handler、工具回调和外部协议适配等输入边界校验用户输入与外部内容。
+- 内部函数信任仓库内调用方，不对依赖、回调或已校验参数重复做 `nil`、空字符串等防御性检查；只在 Telegram
+  middleware/handler、工具回调和外部协议适配等输入边界校验用户输入与外部内容。
 - 对外部输入做 `TrimSpace`、格式和边界校验；错误应保留上下文，不能静默吞掉关键失败。
 - 不记录 API Key、Token、完整工具密钥等敏感值；展示密钥时必须掩码。
 - 保留用户现有工作区改动，不做与任务无关的清理、回滚、重命名或格式化。
@@ -92,7 +93,8 @@
 - 工具本身必须无状态。用户 ID、角色 ID、Telebot context 等调用期信息只通过 `tools.RunningState` 传递。
 - 工具调用前由 manager 自动装载当前用户配置；工具实现不要自行查询或缓存其他用户的配置。
 - 自然语言配置工具由 `internal/tools/builtin/config/` 提供，允许模型列出、读取和修改当前用户自己的工具配置。
-- MCP 相关工具由 `internal/tools/builtin/mcp/` 提供，配合 `internal/mcp/` 的 manager 使用；工具调用、provider 变更会触发对应聊天状态失效。
+- MCP 相关工具由 `internal/tools/builtin/mcp/` 提供，配合 `internal/mcp/` 的 manager 使用；工具调用、provider
+  变更会触发对应聊天状态失效。
 - `RegisterBuiltin` 只用于不需要 manager 自动管理配置的工具，不要用它绕过可配置工具注册流程。
 - 新增配置字段时保证 JSON 标签稳定，拒绝未知字段；涉及持久化与用户隔离的行为补 DB 测试。
 - 工具配置更新需要记录用户 ID 和工具名，但不要记录配置正文或密钥。
@@ -144,7 +146,7 @@ telegram:
 default:
   max_rounds: 36            # 新用户会话轮数上限
   mcp_max_tools: 128        # 每用户 MCP provider 上限，管理员可用 /mcp limit 单独覆盖
-  tool_permissions: {}      # 新用户工具默认权限
+  tool_permissions: { }      # 新用户工具默认权限
 
 # 网络安全
 security:
@@ -165,7 +167,8 @@ atri_cwd: "."
 ```
 
 - `default.max_rounds` 只决定新用户的初始轮数，不是共享模型配置。
-- `default.mcp_max_tools` 为每用户默认 provider 上限，可由管理员通过 `/mcp limit` 单独调整；`security.allow_private_ip` 统一控制用户配置网络出口能否访问内网，`/toolperm deny <user-id> mcp` 可一键禁用该用户的全部 MCP 能力。
+- `default.mcp_max_tools` 为每用户默认 provider 上限，可由管理员通过 `/mcp limit` 单独调整；`security.allow_private_ip`
+  统一控制用户配置网络出口能否访问内网，`/toolperm deny <user-id> mcp` 可一键禁用该用户的全部 MCP 能力。
 - 不得新增全局 `ai_base_url`、`ai_key` 或 `ai_model` 默认项。
 - 不提交真实 Token、API Key、SMTP 凭据、数据库文件或远程仓库缓存。
 
@@ -173,9 +176,9 @@ atri_cwd: "."
 
 - 仅为涉及外部网络、数据库或并发逻辑的代码编写测试；其余内部实现与一眼可断言的逻辑不补测试，不为提高覆盖率而补测试。
 - 以下场景必须补充或更新测试：
-  - 外部网络：Telegram API 交互、MCP 远程加载、SMTP 等真实网络协议接入，以及内网地址拦截。
-  - 数据库：GORM 持久化、事务和用户隔离（account/session/tools/chat/mcp）。
-  - 并发：流式消息、抢占、异步加载与取消（chat TurnLoop、mcp worker 池）。
+    - 外部网络：Telegram API 交互、MCP 远程加载、SMTP 等真实网络协议接入，以及内网地址拦截。
+    - 数据库：GORM 持久化、事务和用户隔离（account/session/tools/chat/mcp）。
+    - 并发：流式消息、抢占、异步加载与取消（chat TurnLoop、mcp worker 池）。
 - 推荐验证顺序：
 
 ```bash
