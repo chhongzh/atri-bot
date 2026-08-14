@@ -173,26 +173,27 @@ func (m *Manager) RenderSystemPrompt(ctx context.Context, id, username string) (
 	values["Character"] = character.Definition
 	values["CharacterYAML"] = string(definitionYAML)
 
-	messages, err := m.systemTemplate.Format(ctx, values)
+	message, err := renderTemplate(ctx, m.systemTemplate, "system", values)
 	if err != nil {
 		return "", err
 	}
-	if len(messages) != 1 {
-		return "", errors.New("system prompt template returned no message")
-	}
-	return messages[0].Content, nil
+	return message.Content, nil
 }
 
 func (m *Manager) RenderUserMessage(ctx context.Context, text string, now time.Time) (*schema.Message, error) {
-	messages, err := m.userTemplate.Format(ctx, map[string]any{
+	return renderTemplate(ctx, m.userTemplate, "user", map[string]any{
 		"Time":        now.Format(time.RFC3339),
 		"UserMessage": text,
 	})
+}
+
+func renderTemplate(ctx context.Context, template *prompt.DefaultChatTemplate, name string, values map[string]any) (*schema.Message, error) {
+	messages, err := template.Format(ctx, values)
 	if err != nil {
 		return nil, err
 	}
 	if len(messages) != 1 {
-		return nil, errors.New("user prompt template returned no message")
+		return nil, fmt.Errorf("%s prompt template returned no message", name)
 	}
 	return messages[0], nil
 }
@@ -211,9 +212,9 @@ func (m *Manager) AddRemote(ctx context.Context, id, url, branch string) error {
 	if id == "" || id == localProviderID || !providerIDPattern.MatchString(id) || strings.Contains(id, "..") {
 		return errors.New("invalid provider id")
 	}
-	url = utils.GitNormalizeRepoURL(url)
-	if url == "" {
-		return errors.New("remote url cannot be empty")
+	url, err := normalizeRemoteURL(url)
+	if err != nil {
+		return err
 	}
 	record := model.ProviderRecord{
 		ID:      id,
@@ -237,9 +238,9 @@ func (m *Manager) UpdateRemote(ctx context.Context, id, url, branch string) erro
 	if record.Kind != model.ProviderRemote {
 		return errors.New("only remote providers can be updated")
 	}
-	url = utils.GitNormalizeRepoURL(url)
-	if url == "" {
-		return errors.New("remote url cannot be empty")
+	url, err := normalizeRemoteURL(url)
+	if err != nil {
+		return err
 	}
 	updates := map[string]any{
 		"url":    url,
@@ -264,6 +265,14 @@ func (m *Manager) Remove(ctx context.Context, id string) error {
 		return err
 	}
 	return m.Reload(ctx)
+}
+
+func normalizeRemoteURL(url string) (string, error) {
+	url = utils.GitNormalizeRepoURL(url)
+	if url == "" {
+		return "", errors.New("remote url cannot be empty")
+	}
+	return url, nil
 }
 
 func providerFromRecord(record model.ProviderRecord) (Provider, error) {

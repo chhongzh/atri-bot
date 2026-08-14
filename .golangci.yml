@@ -1,0 +1,20 @@
+# golangci-lint 配置（v2 格式，需要 golangci-lint >= 2.0）
+#
+# 目标：
+# 1. 关闭所有"注释"类检查：不强制要求为导出符号编写注释，也不校验注释格式。
+#    （revive 的 exported 规则、godot、godoclint 等一律关闭）
+# 2. 启用未使用代码检查：staticcheck 的 unused。
+#    注意：golangci-lint v2 已移除 deadcode linter，未使用的导出函数
+#    需用独立工具分析：
+#    go run golang.org/x/tools/cmd/deadcode@latest ./cmd/atri-bot
+version: "2"
+
+linters:
+  # 默认标准集合：errcheck、govet、ineffassign、staticcheck、unused
+  default: standard
+  enable:
+    - unused
+  disable:
+    - revive      # 含 exported 规则（要求导出符号写注释），关闭
+    - godot       # 要求注释以句号结尾，关闭
+    - godoclint   # 校验 godoc 注释规范，关闭

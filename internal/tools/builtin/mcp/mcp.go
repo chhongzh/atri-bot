@@ -84,9 +84,9 @@ func Register(manager *toolmanager.Manager, mcpManager *mcpmanager.Manager) erro
 		ListMCPProvidersName,
 		"列出当前用户已配置的所有外部 MCP provider。请求头只返回键名，URL 查询参数会被掩码。",
 		func(ctx context.Context, _ *listMCPProvidersInput) (*listMCPProvidersResult, error) {
-			state, ok := toolmanager.RunningStateFromContext(ctx)
-			if !ok {
-				return nil, toolmanager.ErrRunningStateMissing
+			state, err := toolmanager.RequireRunningState(ctx)
+			if err != nil {
+				return nil, err
 			}
 			providers, err := mcpManager.List(ctx, state.UserID)
 			if err != nil {
@@ -128,9 +128,9 @@ func Register(manager *toolmanager.Manager, mcpManager *mcpmanager.Manager) erro
 		GetMCPProviderValueName,
 		"查询当前用户某个 MCP 工具的单个字段。先用 list_mcp_providers 获取工具名。",
 		func(ctx context.Context, input *getMCPProviderValueInput) (*mcpProviderValueResult, error) {
-			state, ok := toolmanager.RunningStateFromContext(ctx)
-			if !ok {
-				return nil, toolmanager.ErrRunningStateMissing
+			state, err := toolmanager.RequireRunningState(ctx)
+			if err != nil {
+				return nil, err
 			}
 			name, err := requiredProviderName(input.Name)
 			if err != nil {
@@ -155,9 +155,9 @@ func Register(manager *toolmanager.Manager, mcpManager *mcpmanager.Manager) erro
 		AddMCPProviderName,
 		"为当前用户添加一个外部 MCP provider。meta 与 header 直接传 JSON 对象，不要转义成字符串。",
 		func(ctx context.Context, input *addMCPProviderInput) (*mcpProviderValueResult, error) {
-			state, ok := toolmanager.RunningStateFromContext(ctx)
-			if !ok {
-				return nil, toolmanager.ErrRunningStateMissing
+			state, err := toolmanager.RequireRunningState(ctx)
+			if err != nil {
+				return nil, err
 			}
 			name, err := requiredProviderName(input.Name)
 			if err != nil {
@@ -189,9 +189,9 @@ func Register(manager *toolmanager.Manager, mcpManager *mcpmanager.Manager) erro
 		UpdateMCPProviderName,
 		"修改当前用户某个 MCP provider 的字段。可新增 meta 或 header 的子键；修改 url 会按全局网络策略重新校验。",
 		func(ctx context.Context, input *updateMCPProviderValueInput) (*mcpProviderValueResult, error) {
-			state, ok := toolmanager.RunningStateFromContext(ctx)
-			if !ok {
-				return nil, toolmanager.ErrRunningStateMissing
+			state, err := toolmanager.RequireRunningState(ctx)
+			if err != nil {
+				return nil, err
 			}
 			if input.Value == nil {
 				return nil, errors.New("mcp provider value is required")
@@ -219,9 +219,9 @@ func Register(manager *toolmanager.Manager, mcpManager *mcpmanager.Manager) erro
 		RemoveMCPProviderName,
 		"删除当前用户的一个 MCP 工具。",
 		func(ctx context.Context, input *removeMCPProviderInput) (*removeMCPProviderResult, error) {
-			state, ok := toolmanager.RunningStateFromContext(ctx)
-			if !ok {
-				return nil, toolmanager.ErrRunningStateMissing
+			state, err := toolmanager.RequireRunningState(ctx)
+			if err != nil {
+				return nil, err
 			}
 			name, err := requiredProviderName(input.Name)
 			if err != nil {

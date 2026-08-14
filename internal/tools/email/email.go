@@ -70,7 +70,7 @@ func mailTool(ctx context.Context, cfg *config, input *input, allowPrivateIP boo
 }
 
 func sendWithTLS(ctx context.Context, e *email.Email, address, host string, auth smtp.Auth, allowPrivateIP bool) error {
-	connection, err := security.NewSafeDialer(&net.Dialer{}, allowPrivateIP).DialContext(ctx, "tcp", address)
+	connection, err := dialSMTP(ctx, address, allowPrivateIP)
 	if err != nil {
 		return err
 	}
@@ -78,20 +78,24 @@ func sendWithTLS(ctx context.Context, e *email.Email, address, host string, auth
 }
 
 func sendWithStartTLS(ctx context.Context, e *email.Email, address, host string, auth smtp.Auth, allowPrivateIP bool) error {
-	connection, err := security.NewSafeDialer(&net.Dialer{}, allowPrivateIP).DialContext(ctx, "tcp", address)
+	connection, err := dialSMTP(ctx, address, allowPrivateIP)
 	if err != nil {
 		return err
 	}
 	return sendSMTP(e, connection, host, auth, &tls.Config{ServerName: host})
 }
 
+func dialSMTP(ctx context.Context, address string, allowPrivateIP bool) (net.Conn, error) {
+	return security.NewSafeDialer(&net.Dialer{}, allowPrivateIP).DialContext(ctx, "tcp", address)
+}
+
 func sendSMTP(e *email.Email, connection net.Conn, host string, auth smtp.Auth, startTLSConfig *tls.Config) error {
-	defer connection.Close()
+	defer func() { _ = connection.Close() }()
 	client, err := smtp.NewClient(connection, host)
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	if err = client.Hello("localhost"); err != nil {
 		return err
 	}
@@ -195,10 +199,6 @@ func trimAddresses(addresses []string) []string {
 		}
 	}
 	return trimmed
-}
-
-func Register(manager *toolmanager.Manager) error {
-	return BindedRegister(false)(manager)
 }
 
 func BindedRegister(allowPrivateIP bool) func(manager *toolmanager.Manager) error {

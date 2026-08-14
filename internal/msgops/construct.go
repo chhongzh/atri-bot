@@ -29,29 +29,6 @@ type ToolCall struct {
 	Index int
 }
 
-// ToolResult contains the common function-tool-result fields used by the examples.
-type ToolResult struct {
-	ID      string
-	Name    string
-	Content string
-}
-
-// NewUser constructs a user message for M.
-func NewUser[M adk.MessageType](text string) M {
-	if KindOf[M]() == KindAgentic {
-		return any(schema.UserAgenticMessage(text)).(M)
-	}
-	return any(schema.UserMessage(text)).(M)
-}
-
-// NewSystem constructs a system message for M.
-func NewSystem[M adk.MessageType](text string) M {
-	if KindOf[M]() == KindAgentic {
-		return any(schema.SystemAgenticMessage(text)).(M)
-	}
-	return any(schema.SystemMessage(text)).(M)
-}
-
 // NewAssistant constructs an assistant message with optional function tool calls.
 func NewAssistant[M adk.MessageType](text string, calls []ToolCall) M {
 	if KindOf[M]() == KindAgentic {
@@ -82,28 +59,4 @@ func NewAssistant[M adk.MessageType](text string, calls []ToolCall) M {
 		})
 	}
 	return any(schema.AssistantMessage(text, schemaCalls)).(M)
-}
-
-// NewToolResult constructs a tool-result message for M.
-func NewToolResult[M adk.MessageType](id, name, content string) M {
-	if KindOf[M]() == KindAgentic {
-		var blocks []*schema.FunctionToolResultContentBlock
-		if content != "" {
-			blocks = []*schema.FunctionToolResultContentBlock{{
-				Type: schema.FunctionToolResultContentBlockTypeText,
-				Text: &schema.UserInputText{Text: content},
-			}}
-		}
-		return any(&schema.AgenticMessage{
-			Role: schema.AgenticRoleTypeUser,
-			ContentBlocks: []*schema.ContentBlock{
-				schema.NewContentBlock(&schema.FunctionToolResult{
-					CallID:  id,
-					Name:    name,
-					Content: blocks,
-				}),
-			},
-		}).(M)
-	}
-	return any(schema.ToolMessage(content, id, schema.WithToolName(name))).(M)
 }

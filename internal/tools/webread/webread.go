@@ -21,9 +21,6 @@ const (
 //go:embed inject.js
 var injectScript string
 
-//go:embed Readability.js
-var readabilityScript string
-
 type config struct {
 }
 

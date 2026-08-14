@@ -20,17 +20,3 @@ func (m *Manager) UserMiddleware(next telebot.HandlerFunc) telebot.HandlerFunc {
 		return next(c)
 	}
 }
-
-func (m *Manager) AdminOnly(next telebot.HandlerFunc) telebot.HandlerFunc {
-	return func(c telebot.Context) error {
-		sender := c.Sender()
-		ok, err := m.IsAdmin(context.Background(), sender.ID)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return c.Send("这个操作需要管理员权限。")
-		}
-		return next(c)
-	}
-}

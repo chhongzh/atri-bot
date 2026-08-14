@@ -12,6 +12,7 @@ import (
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
 	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/model"
+	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -19,7 +20,6 @@ import (
 	"gorm.io/gorm"
 )
 
-var providerPathPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*(?:\.(?:[A-Za-z_][A-Za-z0-9_-]*|[0-9]+))*$`)
 var headerNamePattern = regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 
 const (
@@ -123,7 +123,7 @@ func (m *Manager) Remove(ctx context.Context, userID int64, name string) error {
 }
 
 func (m *Manager) Value(ctx context.Context, userID int64, name, path string) (any, error) {
-	path, err := validateProviderPath(path)
+	path, err := utils.ValidateJSONPath(path, "mcp provider path", 512)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (m *Manager) Value(ctx context.Context, userID int64, name, path string) (a
 }
 
 func (m *Manager) SetValue(ctx context.Context, userID int64, name, path string, value any) (any, error) {
-	path, err := validateProviderPath(path)
+	path, err := utils.ValidateJSONPath(path, "mcp provider path", 512)
 	if err != nil {
 		return nil, err
 	}
@@ -216,12 +216,12 @@ func (m *Manager) maxToolsFor(ctx context.Context, userID int64) (int, error) {
 }
 
 func providerJSON(provider *model.MCPProvider) ([]byte, error) {
-	return json.Marshal(struct {
-		Name   string          `json:"name"`
-		URL    string          `json:"url"`
-		Meta   json.RawMessage `json:"meta"`
-		Header json.RawMessage `json:"header"`
-	}{provider.Name, provider.URL, json.RawMessage(provider.Meta), json.RawMessage(provider.Header)})
+	return json.Marshal(providerDocument{
+		Name:   provider.Name,
+		URL:    provider.URL,
+		Meta:   json.RawMessage(provider.Meta),
+		Header: json.RawMessage(provider.Header),
+	})
 }
 
 type providerDocument struct {
@@ -293,20 +293,6 @@ func parseMeta(raw string) (*mcp.Meta, error) {
 		return nil, fmt.Errorf("%w: meta: %v", errs.ErrInvalidJSON, err)
 	}
 	return &meta, nil
-}
-
-func validateProviderPath(path string) (string, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "", errors.New("mcp provider path is required")
-	}
-	if !providerPathPattern.MatchString(path) {
-		return "", fmt.Errorf("invalid mcp provider path %q", path)
-	}
-	if len(path) > 512 {
-		return "", errors.New("mcp provider path exceeds 512 bytes")
-	}
-	return path, nil
 }
 
 func providerTopLevel(path string) string {

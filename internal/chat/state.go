@@ -55,7 +55,6 @@ func (s *UserState) activeUser() ActiveUser {
 	}
 }
 
-// agent returns the agent built for this state.
 func (s *UserState) agent() *adk.ChatModelAgent {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -27,7 +27,7 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("create temporary directory: %w", err))
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	command := exec.Command(
 		"npm", "exec", "--yes",

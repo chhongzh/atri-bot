@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"regexp"
 	"strings"
 	"sync"
 
+	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/cloudwego/eino/components/tool"
 	toolutils "github.com/cloudwego/eino/components/tool/utils"
 	"github.com/tidwall/gjson"
@@ -25,8 +25,6 @@ var (
 	ErrToolNotFound        = errors.New("tool not found")
 	ErrConfigPathNotFound  = errors.New("tool config path not found")
 )
-
-var configPathPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*(?:\.(?:[A-Za-z_][A-Za-z0-9_-]*|[0-9]+))*$`)
 
 type ConfiguredFunc[C, I, O any] func(
 	ctx context.Context,
@@ -225,16 +223,6 @@ func (m *Manager) Names() []string {
 	return names
 }
 
-// AllNames returns every registered tool name, including builtin tools.
-func (m *Manager) AllNames() []string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	names := make([]string, 0, len(m.order)+len(m.builtinOrder))
-	names = append(names, m.order...)
-	names = append(names, m.builtinOrder...)
-	return names
-}
-
 // PermissionNames returns the independently controllable permission names.
 // Tools sharing a permission are intentionally omitted as separate controls.
 func (m *Manager) PermissionNames() []string {
@@ -264,17 +252,6 @@ func (m *Manager) HasPermission(name string) bool {
 	return ok && permission == name
 }
 
-// Has reports whether a tool with the given name is registered.
-func (m *Manager) Has(name string) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if _, ok := m.registered[name]; ok {
-		return true
-	}
-	_, ok := m.builtins[name]
-	return ok
-}
-
 func (m *Manager) SetConfig(ctx context.Context, userID int64, name string, value []byte) error {
 	m.mu.RLock()
 	registered, ok := m.registered[name]
@@ -295,7 +272,7 @@ func (m *Manager) SetConfig(ctx context.Context, userID int64, name string, valu
 }
 
 func (m *Manager) ConfigValue(ctx context.Context, userID int64, name, path string) (any, error) {
-	path, err := validateConfigPath(path)
+	path, err := utils.ValidateJSONPath(path, "tool config path", 0)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +288,7 @@ func (m *Manager) ConfigValue(ctx context.Context, userID int64, name, path stri
 }
 
 func (m *Manager) SetConfigValue(ctx context.Context, userID int64, name, path string, value any) (any, error) {
-	path, err := validateConfigPath(path)
+	path, err := utils.ValidateJSONPath(path, "tool config path", 0)
 	if err != nil {
 		return nil, err
 	}
@@ -379,17 +356,6 @@ func (m *Manager) loadConfig(
 		return reflect.Value{}, fmt.Errorf("decode config for %s: %w", name, err)
 	}
 	return value, nil
-}
-
-func validateConfigPath(path string) (string, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "", errors.New("tool config path is required")
-	}
-	if !configPathPattern.MatchString(path) {
-		return "", fmt.Errorf("invalid tool config path %q", path)
-	}
-	return path, nil
 }
 
 func validateAndNormalizeConfig(name string, configType reflect.Type, data []byte) ([]byte, error) {

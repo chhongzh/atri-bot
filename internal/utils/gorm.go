@@ -41,26 +41,32 @@ func (l *GormLogger) LogMode(level logger.LogLevel) logger.Interface {
 
 // Info 输出 GORM 信息日志。
 func (l *GormLogger) Info(_ context.Context, msg string, data ...interface{}) {
-	if l.config.LogLevel < logger.Info {
-		return
-	}
-	l.logger.Info("gorm: "+msg, gormFields(data...)...)
+	l.log(logger.Info, msg, data...)
 }
 
 // Warn 输出 GORM 警告日志。
 func (l *GormLogger) Warn(_ context.Context, msg string, data ...interface{}) {
-	if l.config.LogLevel < logger.Warn {
-		return
-	}
-	l.logger.Warn("gorm: "+msg, gormFields(data...)...)
+	l.log(logger.Warn, msg, data...)
 }
 
 // Error 输出 GORM 错误日志。
 func (l *GormLogger) Error(_ context.Context, msg string, data ...interface{}) {
-	if l.config.LogLevel < logger.Error {
+	l.log(logger.Error, msg, data...)
+}
+
+func (l *GormLogger) log(level logger.LogLevel, msg string, data ...interface{}) {
+	if l.config.LogLevel < level {
 		return
 	}
-	l.logger.Error("gorm: "+msg, gormFields(data...)...)
+	fields := gormFields(data...)
+	switch level {
+	case logger.Info:
+		l.logger.Info("gorm: "+msg, fields...)
+	case logger.Warn:
+		l.logger.Warn("gorm: "+msg, fields...)
+	case logger.Error:
+		l.logger.Error("gorm: "+msg, fields...)
+	}
 }
 
 // ParamsFilter 在 ParameterizedQueries 开启时剥离 SQL 参数，防止敏感值进入日志。

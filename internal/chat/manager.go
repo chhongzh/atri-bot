@@ -151,21 +151,12 @@ func (m *Manager) Invalidate(userID int64) {
 		)
 		state.TurnLoop.Wait()
 		state.closeMCP()
-		m.mu.Lock()
-		if m.states[userID] == state {
-			delete(m.states, userID)
-		}
-		m.mu.Unlock()
+		m.removeState(state)
 	}
 }
 
 func (m *Manager) InvalidateAll() {
-	m.mu.Lock()
-	states := make([]*UserState, 0, len(m.states))
-	for _, state := range m.states {
-		states = append(states, state)
-	}
-	m.mu.Unlock()
+	states := m.snapshotStates()
 	for _, state := range states {
 		state.TurnLoop.Stop(
 			adk.WithGracefulTimeout(5*time.Second),
@@ -177,24 +168,15 @@ func (m *Manager) InvalidateAll() {
 		state.TurnLoop.Wait()
 		state.closeMCP()
 	}
-	m.mu.Lock()
 	for _, state := range states {
-		if m.states[state.UserID] == state {
-			delete(m.states, state.UserID)
-		}
+		m.removeState(state)
 	}
-	m.mu.Unlock()
 }
 
 // ActiveUsers returns the chat states currently retained in memory.
 // A retained state is available to serve a user until its TTL expires.
 func (m *Manager) ActiveUsers() []ActiveUser {
-	m.mu.Lock()
-	states := make([]*UserState, 0, len(m.states))
-	for _, state := range m.states {
-		states = append(states, state)
-	}
-	m.mu.Unlock()
+	states := m.snapshotStates()
 
 	users := make([]ActiveUser, 0, len(states))
 	for _, state := range states {
@@ -208,12 +190,7 @@ func (m *Manager) ActiveUsers() []ActiveUser {
 
 func (m *Manager) Shutdown() {
 	m.cancel()
-	m.mu.Lock()
-	states := make([]*UserState, 0, len(m.states))
-	for _, state := range m.states {
-		states = append(states, state)
-	}
-	m.mu.Unlock()
+	states := m.snapshotStates()
 	for _, state := range states {
 		state.TurnLoop.Stop(adk.WithImmediate(), adk.WithSkipCheckpoint(), adk.WithStopCause("shutdown"))
 	}
@@ -225,6 +202,24 @@ func (m *Manager) Shutdown() {
 	}
 	m.mu.Lock()
 	m.states = make(map[int64]*UserState)
+	m.mu.Unlock()
+}
+
+func (m *Manager) snapshotStates() []*UserState {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	states := make([]*UserState, 0, len(m.states))
+	for _, state := range m.states {
+		states = append(states, state)
+	}
+	return states
+}
+
+func (m *Manager) removeState(state *UserState) {
+	m.mu.Lock()
+	if m.states[state.UserID] == state {
+		delete(m.states, state.UserID)
+	}
 	m.mu.Unlock()
 }
 
@@ -308,14 +303,13 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("%w: missing %s", errs.ErrAIConfigIncomplete, strings.Join(missing, ", "))
 	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
 	chatModel, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
 		BaseURL: strings.TrimSpace(settings.AIBaseURL),
 		APIKey:  strings.TrimSpace(settings.AIAPIKey),
 		Model:   strings.TrimSpace(settings.AIModel),
 		Timeout: m.cfg.ModelTimeout,
 		HTTPClient: &http.Client{
-			Transport: security.NewSafeHTTPTransport(transport, m.cfg.AllowPrivateIP),
+			Transport: security.DefaultSafeHTTPTransport(m.cfg.AllowPrivateIP),
 			Timeout:   m.cfg.ModelTimeout,
 		},
 	})
@@ -385,7 +379,7 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 
 func (m *Manager) buildAgent(
 	ctx context.Context,
-	model model.ChatModel,
+	model model.ToolCallingChatModel,
 	userID int64,
 	mcpTools []tool.BaseTool,
 ) (*adk.ChatModelAgent, error) {
@@ -398,7 +392,7 @@ func (m *Manager) buildAgent(
 
 func buildAgentWithTools(
 	ctx context.Context,
-	model model.ChatModel,
+	model model.ToolCallingChatModel,
 	static []tool.BaseTool,
 	mcpTools []tool.BaseTool,
 ) (*adk.ChatModelAgent, error) {
@@ -417,12 +411,16 @@ func buildAgentWithTools(
 	})
 }
 
+func (m *Manager) renderSystemPrompt(ctx context.Context, state *UserState, c telebot.Context) (string, error) {
+	sender := c.Sender()
+	username := utils.StringsFindFirstNonEmpty(sender.Username, utils.TelegramFormatUsername(sender))
+	return m.characters.RenderSystemPrompt(ctx, state.CharacterID, username)
+}
+
 func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Request) (*adk.GenInputResult[*Request, *schema.Message], error) {
 	interruptedMessages := state.startTurnMessages()
 	latest := items[len(items)-1]
-	sender := latest.Context.Sender()
-	username := utils.StringsFindFirstNonEmpty(sender.Username, strings.TrimSpace(sender.FirstName+" "+sender.LastName))
-	systemPrompt, err := m.characters.RenderSystemPrompt(ctx, state.CharacterID, username)
+	systemPrompt, err := m.renderSystemPrompt(ctx, state, latest.Context)
 	if err != nil {
 		return nil, err
 	}
@@ -616,13 +614,9 @@ func (m *Manager) onAgentEvents(
 	interruptedMessages := state.finishTurnMessages()
 	persisted := make([]*schema.Message, 0, len(interruptedMessages)+len(turn.Consumed)+len(outputs))
 	persisted = append(persisted, interruptedMessages...)
-	for _, item := range turn.Consumed {
-		persisted = append(persisted, schema.UserMessage(item.Text))
-	}
+	persisted = append(persisted, requestMessages(turn.Consumed)...)
 	persisted = append(persisted, persistentAgentOutputs(outputs)...)
-	sender := latest.Context.Sender()
-	username := utils.StringsFindFirstNonEmpty(sender.Username, strings.TrimSpace(sender.FirstName+" "+sender.LastName))
-	systemPrompt, err := m.characters.RenderSystemPrompt(ctx, state.CharacterID, username)
+	systemPrompt, err := m.renderSystemPrompt(ctx, state, latest.Context)
 	if err != nil {
 		completeRequests(turn.Consumed, err)
 		return err
@@ -709,11 +703,7 @@ func (m *Manager) watchState(state *UserState) {
 	for _, request := range result.InterruptedItems {
 		request.complete(errs.ErrStateStopped)
 	}
-	m.mu.Lock()
-	if m.states[state.UserID] == state {
-		delete(m.states, state.UserID)
-	}
-	m.mu.Unlock()
+	m.removeState(state)
 	state.closeMCP()
 }
 

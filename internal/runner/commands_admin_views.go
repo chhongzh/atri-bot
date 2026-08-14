@@ -53,28 +53,31 @@ func (r *Runner) commandActiveUsers(c telebot.Context, args []string) {
 	}
 	start := (page - 1) * activeUserPageSize
 	end := min(start+activeUserPageSize, len(activeUsers))
-	var builder strings.Builder
-	fmt.Fprintf(&builder, "活跃聊天状态（第 %d/%d 页，共 %d 位）：\n", page, pages, len(activeUsers))
-	for _, active := range activeUsers[start:end] {
-		user, err := r.accounts.Get(ctx, active.UserID)
-		if err != nil {
-			r.commandError(c, err)
-			return
+	if err := r.sendListResult(c, func(builder *strings.Builder) error {
+		fmt.Fprintf(builder, "活跃聊天状态（第 %d/%d 页，共 %d 位）：\n", page, pages, len(activeUsers))
+		for _, active := range activeUsers[start:end] {
+			user, err := r.accounts.Get(ctx, active.UserID)
+			if err != nil {
+				return err
+			}
+			characterID := active.CharacterID
+			if characterID == "" {
+				characterID = "未选择"
+			}
+			fmt.Fprintf(
+				builder,
+				"- %s\n  角色：%s；最近活动：%s\n",
+				formatAccountUser(*user),
+				characterID,
+				formatAccountTime(active.LastActiveAt),
+			)
 		}
-		characterID := active.CharacterID
-		if characterID == "" {
-			characterID = "未选择"
-		}
-		fmt.Fprintf(
-			&builder,
-			"- %s\n  角色：%s；最近活动：%s\n",
-			formatAccountUser(*user),
-			characterID,
-			formatAccountTime(active.LastActiveAt),
-		)
+		writePageFooter(builder, page, pages, "/active-users")
+		return nil
+	}); err != nil {
+		r.commandError(c, err)
+		return
 	}
-	writePageFooter(&builder, page, pages, "/active-users")
-	_ = r.sendSystemResultAndDelete(c, strings.TrimSpace(builder.String()))
 }
 
 func (r *Runner) commandUser(c telebot.Context, args []string) {
@@ -153,13 +156,14 @@ func (r *Runner) listAccounts(
 		r.commandError(c, err)
 		return
 	}
-	var builder strings.Builder
-	fmt.Fprintf(&builder, "%s（第 %d/%d 页，共 %d 位）：\n", label, page, result.Pages, result.Total)
-	for _, user := range result.Users {
-		fmt.Fprintf(&builder, "- %s\n", formatAccountUser(user))
-	}
-	writePageFooter(&builder, page, result.Pages, pageCommand)
-	_ = r.sendSystemResultAndDelete(c, strings.TrimSpace(builder.String()))
+	_ = r.sendListResult(c, func(builder *strings.Builder) error {
+		fmt.Fprintf(builder, "%s（第 %d/%d 页，共 %d 位）：\n", label, page, result.Pages, result.Total)
+		for _, user := range result.Users {
+			fmt.Fprintf(builder, "- %s\n", formatAccountUser(user))
+		}
+		writePageFooter(builder, page, result.Pages, pageCommand)
+		return nil
+	})
 }
 
 func userListRequest(args []string) (account.UserListFilter, string, int, string, error) {

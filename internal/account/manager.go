@@ -149,11 +149,8 @@ func (m *Manager) SetRole(ctx context.Context, actorID, targetID int64, role Rol
 		if err := requireAdmin(tx, actorID); err != nil {
 			return err
 		}
-		var target User
-		if err := tx.First(&target, "telegram_id = ?", targetID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrUserNotFound
-			}
+		target, err := loadTargetUser(tx, targetID)
+		if err != nil {
 			return err
 		}
 		if target.Role == RoleAdmin && role != RoleAdmin {
@@ -161,7 +158,7 @@ func (m *Manager) SetRole(ctx context.Context, actorID, targetID int64, role Rol
 				return err
 			}
 		}
-		return tx.Model(&target).Update("role", role).Error
+		return tx.Model(target).Update("role", role).Error
 	})
 }
 
@@ -170,11 +167,8 @@ func (m *Manager) SetBanned(ctx context.Context, actorID, targetID int64, banned
 		if err := requireAdmin(tx, actorID); err != nil {
 			return err
 		}
-		var target User
-		if err := tx.First(&target, "telegram_id = ?", targetID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrUserNotFound
-			}
+		target, err := loadTargetUser(tx, targetID)
+		if err != nil {
 			return err
 		}
 		if banned && target.Role == RoleAdmin {
@@ -182,7 +176,7 @@ func (m *Manager) SetBanned(ctx context.Context, actorID, targetID int64, banned
 				return err
 			}
 		}
-		return tx.Model(&target).Update("banned", banned).Error
+		return tx.Model(target).Update("banned", banned).Error
 	})
 }
 
@@ -191,11 +185,8 @@ func (m *Manager) Delete(ctx context.Context, actorID, targetID int64) error {
 		if err := requireAdmin(tx, actorID); err != nil {
 			return err
 		}
-		var target User
-		if err := tx.First(&target, "telegram_id = ?", targetID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrUserNotFound
-			}
+		target, err := loadTargetUser(tx, targetID)
+		if err != nil {
 			return err
 		}
 		if target.Role == RoleAdmin {
@@ -203,52 +194,46 @@ func (m *Manager) Delete(ctx context.Context, actorID, targetID int64) error {
 				return err
 			}
 		}
-		return tx.Delete(&target).Error
+		return tx.Delete(target).Error
 	})
 }
 
 func (m *Manager) SetCharacter(ctx context.Context, id int64, characterID string) error {
-	settings, err := m.Settings(ctx, id)
-	if err != nil {
-		return err
-	}
-	settings.CharacterID = characterID
-	return m.SetSettings(ctx, id, settings)
+	return m.updateSettings(ctx, id, func(settings *configmanager.UserSettings) {
+		settings.CharacterID = characterID
+	})
 }
 
 func (m *Manager) SetAIBaseURL(ctx context.Context, id int64, value string) error {
-	settings, err := m.Settings(ctx, id)
-	if err != nil {
-		return err
-	}
-	settings.AIBaseURL = value
-	return m.SetSettings(ctx, id, settings)
+	return m.updateSettings(ctx, id, func(settings *configmanager.UserSettings) {
+		settings.AIBaseURL = value
+	})
 }
 
 func (m *Manager) SetAIAPIKey(ctx context.Context, id int64, value string) error {
-	settings, err := m.Settings(ctx, id)
-	if err != nil {
-		return err
-	}
-	settings.AIAPIKey = value
-	return m.SetSettings(ctx, id, settings)
+	return m.updateSettings(ctx, id, func(settings *configmanager.UserSettings) {
+		settings.AIAPIKey = value
+	})
 }
 
 func (m *Manager) SetAIModel(ctx context.Context, id int64, value string) error {
-	settings, err := m.Settings(ctx, id)
-	if err != nil {
-		return err
-	}
-	settings.AIModel = value
-	return m.SetSettings(ctx, id, settings)
+	return m.updateSettings(ctx, id, func(settings *configmanager.UserSettings) {
+		settings.AIModel = value
+	})
 }
 
 func (m *Manager) SetAIMaxRounds(ctx context.Context, id int64, value int) error {
+	return m.updateSettings(ctx, id, func(settings *configmanager.UserSettings) {
+		settings.AIMaxRounds = value
+	})
+}
+
+func (m *Manager) updateSettings(ctx context.Context, id int64, mutate func(*configmanager.UserSettings)) error {
 	settings, err := m.Settings(ctx, id)
 	if err != nil {
 		return err
 	}
-	settings.AIMaxRounds = value
+	mutate(&settings)
 	return m.SetSettings(ctx, id, settings)
 }
 
@@ -262,14 +247,8 @@ func (m *Manager) SetMCPMaxTools(ctx context.Context, actorID, targetID int64, v
 		if err := requireAdmin(tx, actorID); err != nil {
 			return err
 		}
-		var target User
-		if err := tx.First(&target, "telegram_id = ?", targetID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrUserNotFound
-			}
-			return err
-		}
-		return nil
+		_, err := loadTargetUser(tx, targetID)
+		return err
 	}); err != nil {
 		return err
 	}
@@ -360,6 +339,17 @@ func requireAdmin(tx *gorm.DB, id int64) error {
 		return ErrPermissionDenied
 	}
 	return nil
+}
+
+func loadTargetUser(tx *gorm.DB, targetID int64) (*User, error) {
+	var target User
+	if err := tx.First(&target, "telegram_id = ?", targetID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return &target, nil
 }
 
 func ensureAnotherAdmin(tx *gorm.DB, excludedID int64) error {

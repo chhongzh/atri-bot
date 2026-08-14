@@ -39,6 +39,14 @@ func (r *Runner) commandError(c telebot.Context, err error) {
 	_ = r.sendSystemResultAndDelete(c, "操作失败："+err.Error())
 }
 
+func (r *Runner) sendListResult(c telebot.Context, build func(*strings.Builder) error) error {
+	var builder strings.Builder
+	if err := build(&builder); err != nil {
+		return err
+	}
+	return r.sendSystemResultAndDelete(c, strings.TrimSpace(builder.String()))
+}
+
 func commandAction(args []string, defaultAction string) string {
 	if len(args) == 0 {
 		return defaultAction

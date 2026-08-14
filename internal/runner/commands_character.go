@@ -29,12 +29,13 @@ func (r *Runner) commandCharacters(c telebot.Context, _ []string) {
 		_ = r.sendSystemResultAndDelete(c, "当前没有可用角色。")
 		return
 	}
-	var builder strings.Builder
-	builder.WriteString("可用角色：\n")
-	for _, character := range characters {
-		fmt.Fprintf(&builder, "- %s — %s（%s）\n", character.ID, character.Name(), character.ProviderID)
-	}
-	_ = r.sendSystemResultAndDelete(c, strings.TrimSpace(builder.String()))
+	_ = r.sendListResult(c, func(builder *strings.Builder) error {
+		builder.WriteString("可用角色：\n")
+		for _, character := range characters {
+			fmt.Fprintf(builder, "- %s — %s（%s）\n", character.ID, character.Name(), character.ProviderID)
+		}
+		return nil
+	})
 }
 
 func (r *Runner) commandCharacter(c telebot.Context, args []string) {

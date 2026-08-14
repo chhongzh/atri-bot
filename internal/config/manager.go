@@ -45,12 +45,12 @@ func (m *Manager) SetUser[T any](ctx context.Context, userID int64, key string, 
 
 func query[T any](ctx context.Context, manager *Manager, scope string, userID int64, key string) (T, error) {
 	var zero T
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return zero, errors.New("configuration key is required")
+	key, err := normalizeKey(key)
+	if err != nil {
+		return zero, err
 	}
 	var record Record
-	err := manager.db.WithContext(ctx).First(&record, "scope = ? AND user_id = ? AND key = ?", scope, userID, key).Error
+	err = manager.db.WithContext(ctx).First(&record, "scope = ? AND user_id = ? AND key = ?", scope, userID, key).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return zero, fmt.Errorf("%w: %s", ErrNotFound, key)
 	}
@@ -64,9 +64,9 @@ func query[T any](ctx context.Context, manager *Manager, scope string, userID in
 }
 
 func set[T any](ctx context.Context, manager *Manager, scope string, userID int64, key string, value T) error {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return errors.New("configuration key is required")
+	key, err := normalizeKey(key)
+	if err != nil {
+		return err
 	}
 	data, err := json.Marshal(value)
 	if err != nil {
@@ -81,4 +81,12 @@ func set[T any](ctx context.Context, manager *Manager, scope string, userID int6
 		},
 		DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
 	}).Create(&record).Error
+}
+
+func normalizeKey(key string) (string, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", errors.New("configuration key is required")
+	}
+	return key, nil
 }

@@ -105,11 +105,7 @@ func (m *Manager) Load(ctx context.Context, userID int64, characterID string, op
 		zap.Bool("has_summary", window.summary != nil),
 		zap.Uint("cutoff_round_id", window.cutoffRoundID()),
 	)
-	if len(window.rounds) < maxRounds {
-		return window.messages, nil
-	}
-	m.logCompressionThreshold(userID, characterID, "load", len(window.rounds), maxRounds, len(window.messages), window)
-	return m.compress(ctx, userID, characterID, "load", maxRounds, opts, window)
+	return m.maybeCompress(ctx, userID, characterID, "load", maxRounds, opts, window)
 }
 
 func (m *Manager) AppendRound(
@@ -154,26 +150,8 @@ func (m *Manager) AppendRound(
 		return err
 	}
 	maxRounds := normalizeMaxRounds(opts.MaxRounds)
-	if len(window.rounds) < maxRounds {
-		return nil
-	}
-	m.logCompressionThreshold(userID, characterID, "append_round", len(window.rounds), maxRounds, len(window.messages), window)
-	_, err = m.compress(ctx, userID, characterID, "append_round", maxRounds, opts, window)
+	_, err = m.maybeCompress(ctx, userID, characterID, "append_round", maxRounds, opts, window)
 	return err
-}
-
-func (m *Manager) Clear(ctx context.Context, userID int64, characterID string) error {
-	release, err := m.lock(ctx, userID, characterID, "clear")
-	if err != nil {
-		return err
-	}
-	defer release()
-	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if txErr := tx.Where("user_id = ? AND character_id = ?", userID, characterID).Delete(&summaryEntry{}).Error; txErr != nil {
-			return txErr
-		}
-		return tx.Where("user_id = ? AND character_id = ?", userID, characterID).Delete(&roundEntry{}).Error
-	})
 }
 
 func (m *Manager) Wait(ctx context.Context, userID int64, characterID string) error {
@@ -183,6 +161,22 @@ func (m *Manager) Wait(ctx context.Context, userID int64, characterID string) er
 	}
 	release()
 	return nil
+}
+
+func (m *Manager) maybeCompress(
+	ctx context.Context,
+	userID int64,
+	characterID string,
+	trigger string,
+	maxRounds int,
+	opts CompressionOptions,
+	window *historyWindow,
+) ([]*schema.Message, error) {
+	if len(window.rounds) < maxRounds {
+		return window.messages, nil
+	}
+	m.logCompressionThreshold(userID, characterID, trigger, len(window.rounds), maxRounds, len(window.messages), window)
+	return m.compress(ctx, userID, characterID, trigger, maxRounds, opts, window)
 }
 
 func (m *Manager) compress(
@@ -395,11 +389,11 @@ func decodeHistoryWindow(summary *summaryEntry, rounds []roundEntry) ([]*schema.
 
 func makeRoundEntry(userID int64, characterID string, messages []*schema.Message) (roundEntry, error) {
 	persisted, _, _ := compactToolResults(messages)
-	data, err := json.Marshal(persisted)
+	data, err := marshalSessionJSON(persisted, "session round")
 	if err != nil {
-		return roundEntry{}, fmt.Errorf("encode session round: %w", err)
+		return roundEntry{}, err
 	}
-	return roundEntry{UserID: userID, CharacterID: characterID, Messages: string(data)}, nil
+	return roundEntry{UserID: userID, CharacterID: characterID, Messages: data}, nil
 }
 
 func compactToolResults(messages []*schema.Message) ([]*schema.Message, int, int) {
@@ -444,16 +438,24 @@ func compactToolResultContent(content []rune, limit int) string {
 }
 
 func makeSummaryEntry(userID int64, characterID string, cutoffRoundID uint, message *schema.Message) (summaryEntry, error) {
-	data, err := json.Marshal(message)
+	data, err := marshalSessionJSON(message, "session summary")
 	if err != nil {
-		return summaryEntry{}, fmt.Errorf("encode session summary: %w", err)
+		return summaryEntry{}, err
 	}
 	return summaryEntry{
 		UserID:        userID,
 		CharacterID:   characterID,
 		CutoffRoundID: cutoffRoundID,
-		Message:       string(data),
+		Message:       data,
 	}, nil
+}
+
+func marshalSessionJSON(v any, what string) (string, error) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return "", fmt.Errorf("encode %s: %w", what, err)
+	}
+	return string(data), nil
 }
 
 func normalizeMaxRounds(maxRounds int) int {
