@@ -16,7 +16,7 @@ func (r *Runner) middlewareForSender(next telebot.HandlerFunc) telebot.HandlerFu
 
 func (r *Runner) middlewareForLogging(next telebot.HandlerFunc) telebot.HandlerFunc {
 	return func(c telebot.Context) error {
-		r.logger.Info("incoming telegram update", utils.ExpandUserFields(c)...)
+		r.logger.Info("incoming telegram update", utils.ExpandTelebotContext(c)...)
 		return next(c)
 	}
 }

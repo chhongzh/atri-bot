@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chhongzh/atri-bot/internal/utils"
+	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 )
 
@@ -59,6 +61,16 @@ func (r *Runner) commandProvider(c telebot.Context, args []string) {
 		r.commandError(c, err)
 		return
 	}
+	providerID := ""
+	if len(args) > 1 {
+		providerID = strings.TrimSpace(args[1])
+	}
+	r.logger.Info("character provider updated",
+		append(utils.ExpandTelebotContext(c),
+			zap.String("provider_action", action),
+			zap.String("provider_id", providerID),
+		)...,
+	)
 	r.chats.InvalidateAll()
 	_ = r.sendSystemResultAndDelete(c, "角色 Provider 已更新。")
 }

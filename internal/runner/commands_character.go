@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/utils"
+	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 )
 
@@ -61,6 +63,9 @@ func (r *Runner) commandCharacter(c telebot.Context, args []string) {
 		r.commandError(c, err)
 		return
 	}
+	r.logger.Info("user switched character",
+		append(utils.ExpandTelebotContext(c), zap.String("character_id", characterID))...,
+	)
 	r.chats.Invalidate(sender.ID)
 	_ = r.sendSystemResultAndDelete(c, "已切换角色为 "+characterID+"。")
 }

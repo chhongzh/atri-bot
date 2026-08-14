@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 )
@@ -27,13 +28,13 @@ func (r *Runner) registerCommands() error {
 }
 
 func (r *Runner) commandStart(c telebot.Context, _ []string) {
+	r.logger.Debug("start command handled", utils.ExpandTelebotContext(c)...)
 	_ = r.sendSystemResultAndDelete(c, "你好，使用 /help 查看可用命令。")
 }
 
 func (r *Runner) commandError(c telebot.Context, err error) {
 	r.logger.Error("command failed",
-		zap.Int64("user_id", c.Sender().ID),
-		zap.Error(err),
+		append(utils.ExpandTelebotContext(c), zap.Error(err))...,
 	)
 	_ = r.sendSystemResultAndDelete(c, "操作失败："+err.Error())
 }

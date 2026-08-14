@@ -71,14 +71,20 @@ func New(logger *zap.Logger, cfg *Config, db *gorm.DB) *Runner {
 }
 
 func (r *Runner) Start() {
+	r.logger.Info("telegram bot polling started")
 	r.bot.Start()
 }
 
 func (r *Runner) Stop() {
+	r.logger.Info("runner shutting down")
 	r.deleteAllSystemResults()
+	r.logger.Debug("system results cleared")
 	r.chats.Shutdown()
+	r.logger.Debug("chat states shut down")
 	r.mcp.Close()
+	r.logger.Debug("mcp workers closed")
 	r.bot.Stop()
+	r.logger.Info("telegram bot stopped")
 }
 
 func (r *Runner) DB() *gorm.DB {

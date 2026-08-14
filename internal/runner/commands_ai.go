@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/utils"
+	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 )
 
@@ -65,6 +67,9 @@ func (r *Runner) commandAI(c telebot.Context, args []string) {
 		r.commandError(c, err)
 		return
 	}
+	r.logger.Info("user AI configuration updated",
+		append(utils.ExpandTelebotContext(c), zap.String("config_item", action))...,
+	)
 	r.chats.Invalidate(sender.ID)
 	_ = r.sendSystemResultAndDelete(c, "AI 配置已更新，将在下一条消息生效。")
 }

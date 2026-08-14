@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/utils"
+	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 )
 
@@ -59,6 +61,13 @@ func (r *Runner) commandToolPerm(c telebot.Context, args []string) {
 		r.commandError(c, err)
 		return
 	}
+	r.logger.Info("user tool permission updated",
+		append(utils.ExpandTelebotContext(c),
+			zap.String("toolperm_action", action),
+			zap.String("tool_name", toolName),
+			zap.Int64("target_user_id", targetID),
+		)...,
+	)
 	r.chats.Invalidate(targetID)
 	_ = r.sendSystemResultAndDelete(c, fmt.Sprintf("已更新用户 %d 的工具权限，将在其下一条消息生效。", targetID))
 }

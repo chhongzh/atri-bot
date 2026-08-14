@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/chhongzh/atri-bot/internal/account"
+	"github.com/chhongzh/atri-bot/internal/utils"
+	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 )
 
@@ -58,6 +60,12 @@ func (r *Runner) commandAdmin(c telebot.Context, args []string) {
 		r.commandError(c, err)
 		return
 	}
+	r.logger.Info("admin account operation completed",
+		append(utils.ExpandTelebotContext(c),
+			zap.String("admin_action", action),
+			zap.Int64("target_user_id", targetID),
+		)...,
+	)
 
 	r.chats.Invalidate(targetID)
 	_ = r.sendSystemResultAndDelete(c, fmt.Sprintf("已对用户 %d 执行 %s。", targetID, action))

@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 )
@@ -20,17 +21,25 @@ func (r *Runner) sendLoadingResultAndDelete(c telebot.Context, result string) er
 func (r *Runner) sendTemporaryResult(c telebot.Context, result string, deleteSource bool, opts ...interface{}) error {
 	msg, err := c.Bot().Send(c.Recipient(), result, opts...)
 	if err != nil {
+		r.logger.Warn("failed to send system result",
+			append(utils.ExpandTelebotContext(c), zap.Error(err))...,
+		)
 		return err
 	}
+	r.logger.Debug("system result sent", utils.ExpandTelebotContext(c)...)
 
 	r.setSystemResultDelete(c.Sender(), func() {
 		if deleteSource {
 			if err := c.Delete(); err != nil {
-				r.logger.Warn("failed to delete source message when deleting system result", zap.Error(err))
+				r.logger.Warn("failed to delete source message when deleting system result",
+					append(utils.ExpandTelebotContext(c), zap.Error(err))...,
+				)
 			}
 		}
 		if err := c.Bot().Delete(msg); err != nil {
-			r.logger.Warn("failed to delete result when sending result", zap.Error(err))
+			r.logger.Warn("failed to delete system result message",
+				append(utils.ExpandTelebotContext(c), zap.Error(err))...,
+			)
 		}
 	})
 	return nil

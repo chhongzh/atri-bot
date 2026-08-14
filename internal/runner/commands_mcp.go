@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/utils"
+	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 )
 
@@ -57,6 +59,12 @@ func (r *Runner) commandMCP(c telebot.Context, args []string) {
 		r.commandError(c, err)
 		return
 	}
+	r.logger.Info("user MCP settings updated",
+		append(utils.ExpandTelebotContext(c),
+			zap.String("mcp_action", action),
+			zap.Int64("target_user_id", targetID),
+		)...,
+	)
 	r.chats.Invalidate(targetID)
 	_ = r.sendSystemResultAndDelete(c, fmt.Sprintf("已更新用户 %d 的 MCP 设置，将在其下一条消息生效。", targetID))
 }

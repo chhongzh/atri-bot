@@ -12,6 +12,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/tools/email"
 	"github.com/chhongzh/atri-bot/internal/tools/hotspot"
 	"github.com/chhongzh/atri-bot/internal/tools/webread"
+	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/glebarez/sqlite"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
@@ -49,10 +50,11 @@ func getLogger() (*zap.Logger, error) {
 	return cfg.Build()
 }
 
-func getDB(cfg *Config) (*gorm.DB, error) {
+func getDB(cfg *Config, log *zap.Logger) (*gorm.DB, error) {
+	gormConfig := &gorm.Config{Logger: utils.NewGormLogger(log)}
 	switch cfg.Database.Type {
 	case "mysql":
-		return gorm.Open(mysql.Open(cfg.Database.DSN))
+		return gorm.Open(mysql.Open(cfg.Database.DSN), gormConfig)
 	default: // sqlite
 		root := cfg.CWD
 		if root == "" {
@@ -66,7 +68,7 @@ func getDB(cfg *Config) (*gorm.DB, error) {
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(root, path)
 		}
-		return gorm.Open(sqlite.Open(path))
+		return gorm.Open(sqlite.Open(path), gormConfig)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/chhongzh/atri-bot/internal/command"
 	"github.com/chhongzh/atri-bot/internal/errs"
+	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 )
@@ -19,7 +20,8 @@ const (
 
 func (r *Runner) handlerForText(c telebot.Context) error {
 	text := c.Text()
-	if command.IsCommandText(text) {
+	isCommand := command.IsCommandText(text)
+	if isCommand {
 		handled, err := r.commands.Dispatch(c, text)
 		if handled || err != nil {
 			return err
@@ -32,13 +34,21 @@ func (r *Runner) handlerForText(c telebot.Context) error {
 	}
 	go r.maintainChatAction(ctx, c)
 
+	fields := utils.ExpandTelebotContext(c)
+	r.logger.Debug("handling chat message", append(fields, zap.Bool("command", isCommand))...)
+	start := time.Now()
 	err := r.chats.Chat(ctx, c, text)
 	if errors.Is(err, errs.ErrAIConfigIncomplete) {
+		r.logger.Warn("user attempted chat without complete AI config", fields...)
 		if err = c.Send("缺少 AI 配置，请先使用/ai配置你自己的 AI 连接"); err == nil {
 			r.onMessageSent(c)
 		}
 		return err
 	}
+	if err != nil {
+		return err
+	}
+	r.logger.Debug("chat round completed", append(fields, zap.Duration("elapsed", time.Since(start)))...)
 	return err
 }
 
@@ -51,7 +61,9 @@ func (r *Runner) maintainChatAction(ctx context.Context, c telebot.Context) {
 			return
 		case <-ticker.C:
 			if err := c.Notify(telebot.Typing); err != nil {
-				r.logger.Debug("failed to refresh chat action", zap.Error(err))
+				r.logger.Debug("failed to refresh chat action",
+					append(utils.ExpandTelebotContext(c), zap.Error(err))...,
+				)
 			}
 		}
 	}
@@ -70,10 +82,7 @@ func (r *Runner) handlerForError(err error, c telebot.Context) {
 		r.logger.Error("failed to handle telegram update", fields...)
 		return
 	}
-	fields = append(fields,
-		zap.Int64("user_id", c.Sender().ID),
-		zap.String("username", c.Sender().Username),
-	)
+	fields = append(fields, utils.ExpandTelebotContext(c)...)
 	r.logger.Error("failed to handle telegram update", fields...)
 
 	r.sendAdminMessage(context.Background(), c.Bot(), adminMessage{
@@ -88,8 +97,7 @@ func (r *Runner) handlerForError(err error, c telebot.Context) {
 	})
 	if sendErr := r.sendSystemResultAndDeleteOpts(c, formatErrorResult(err), telebot.ModeMarkdownV2); sendErr != nil {
 		r.logger.Warn("failed to send error result to user",
-			zap.Int64("user_id", c.Sender().ID),
-			zap.Error(sendErr),
+			append(utils.ExpandTelebotContext(c), zap.Error(sendErr))...,
 		)
 	}
 }

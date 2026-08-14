@@ -31,6 +31,7 @@ type adminMessageField struct {
 }
 
 func (r *Runner) sendAdminMessage(ctx context.Context, bot telebot.API, message adminMessage) {
+	r.logger.Debug("sending administrator notification", zap.String("notification_category", message.Category))
 	admins, err := r.accounts.Admins(ctx)
 	if err != nil {
 		r.logger.Error("failed to list administrators for notification", zap.Error(err))
