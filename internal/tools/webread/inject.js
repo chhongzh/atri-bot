@@ -4,7 +4,7 @@
  */
 
 (async () => {
-    loadExternalScript=(src)=>  {
+    loadExternalScript = (src) => {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = src;
