@@ -422,7 +422,7 @@ func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Reque
 	latest := items[len(items)-1]
 	sender := latest.Context.Sender()
 	username := utils.StringsFindFirstNonEmpty(sender.Username, strings.TrimSpace(sender.FirstName+" "+sender.LastName))
-	systemPrompt, err := m.characters.RenderSystemPrompt(ctx, state.CharacterID, username, time.Now())
+	systemPrompt, err := m.characters.RenderSystemPrompt(ctx, state.CharacterID, username)
 	if err != nil {
 		return nil, err
 	}
@@ -450,7 +450,11 @@ func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Reque
 	messages = append(messages, history...)
 	messages = append(messages, interruptedMessages...)
 	for _, item := range items {
-		messages = append(messages, schema.UserMessage(item.Text))
+		message, renderErr := m.characters.RenderUserMessage(ctx, item.Text, time.Now())
+		if renderErr != nil {
+			return nil, renderErr
+		}
+		messages = append(messages, message)
 	}
 	m.logger.Debug("prepared chat turn",
 		zap.Int64("user_id", state.UserID),
@@ -618,7 +622,7 @@ func (m *Manager) onAgentEvents(
 	persisted = append(persisted, persistentAgentOutputs(outputs)...)
 	sender := latest.Context.Sender()
 	username := utils.StringsFindFirstNonEmpty(sender.Username, strings.TrimSpace(sender.FirstName+" "+sender.LastName))
-	systemPrompt, err := m.characters.RenderSystemPrompt(ctx, state.CharacterID, username, time.Now())
+	systemPrompt, err := m.characters.RenderSystemPrompt(ctx, state.CharacterID, username)
 	if err != nil {
 		completeRequests(turn.Consumed, err)
 		return err

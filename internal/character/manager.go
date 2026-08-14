@@ -28,6 +28,9 @@ var providerIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 //go:embed system.j2
 var systemTemplate string
 
+//go:embed user.j2
+var userTemplate string
+
 type Config struct {
 	CWD          string
 	RemoteURL    string
@@ -39,18 +42,20 @@ type Manager struct {
 	logger *zap.Logger
 	cfg    Config
 
-	mu         sync.RWMutex
-	characters map[string]*model.Character
-	template   *prompt.DefaultChatTemplate
+	mu             sync.RWMutex
+	characters     map[string]*model.Character
+	systemTemplate *prompt.DefaultChatTemplate
+	userTemplate   *prompt.DefaultChatTemplate
 }
 
 func New(db *gorm.DB, logger *zap.Logger, cfg Config) *Manager {
 	return &Manager{
-		db:         db,
-		logger:     logger,
-		cfg:        cfg,
-		characters: make(map[string]*model.Character),
-		template:   prompt.FromMessages(schema.Jinja2, schema.SystemMessage(systemTemplate)),
+		db:             db,
+		logger:         logger,
+		cfg:            cfg,
+		characters:     make(map[string]*model.Character),
+		systemTemplate: prompt.FromMessages(schema.Jinja2, schema.SystemMessage(systemTemplate)),
+		userTemplate:   prompt.FromMessages(schema.Jinja2, schema.UserMessage(userTemplate)),
 	}
 }
 
@@ -150,7 +155,7 @@ func (m *Manager) Default() (*model.Character, bool) {
 	return characters[0], true
 }
 
-func (m *Manager) RenderSystemPrompt(ctx context.Context, id, username string, now time.Time) (string, error) {
+func (m *Manager) RenderSystemPrompt(ctx context.Context, id, username string) (string, error) {
 	character, ok := m.Get(id)
 	if !ok {
 		return "", fmt.Errorf("character %q not found", id)
@@ -159,17 +164,16 @@ func (m *Manager) RenderSystemPrompt(ctx context.Context, id, username string, n
 	if err != nil {
 		return "", err
 	}
-	values := make(map[string]any, len(character.Definition)+5)
+	values := make(map[string]any, len(character.Definition)+4)
 	for key, value := range character.Definition {
 		values[key] = value
 	}
-	values["Time"] = now.Format(time.RFC3339)
 	values["Username"] = username
 	values["CharacterID"] = character.ID
 	values["Character"] = character.Definition
 	values["CharacterYAML"] = string(definitionYAML)
 
-	messages, err := m.template.Format(ctx, values)
+	messages, err := m.systemTemplate.Format(ctx, values)
 	if err != nil {
 		return "", err
 	}
@@ -177,6 +181,20 @@ func (m *Manager) RenderSystemPrompt(ctx context.Context, id, username string, n
 		return "", errors.New("system prompt template returned no message")
 	}
 	return messages[0].Content, nil
+}
+
+func (m *Manager) RenderUserMessage(ctx context.Context, text string, now time.Time) (*schema.Message, error) {
+	messages, err := m.userTemplate.Format(ctx, map[string]any{
+		"Time":        now.Format(time.RFC3339),
+		"UserMessage": text,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(messages) != 1 {
+		return nil, errors.New("user prompt template returned no message")
+	}
+	return messages[0], nil
 }
 
 func (m *Manager) Providers(ctx context.Context) ([]model.ProviderRecord, error) {
