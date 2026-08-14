@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/chhongzh/atri-bot/internal/msgops"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/prompt"
@@ -46,8 +47,8 @@ type sessionLock struct {
 }
 
 type historyWindow struct {
-	summary  *summaryEntry
-	rounds   []roundEntry
+	summary  *model.SessionSummary
+	rounds   []model.SessionRound
 	messages []*schema.Message
 }
 
@@ -81,7 +82,7 @@ func New(db *gorm.DB, logger *zap.Logger) *Manager {
 }
 
 func (m *Manager) Init() error {
-	return m.db.AutoMigrate(&roundEntry{}, &summaryEntry{})
+	return m.db.AutoMigrate(&model.SessionRound{}, &model.SessionSummary{})
 }
 
 func (m *Manager) Load(ctx context.Context, userID int64, characterID string, opts CompressionOptions) ([]*schema.Message, error) {
@@ -127,7 +128,7 @@ func (m *Manager) AppendRound(
 			zap.Int("removed_characters", removedRunes),
 		)
 	}
-	record, err := makeRoundEntry(userID, characterID, persisted)
+	record, err := makeSessionRound(userID, characterID, persisted)
 	if err != nil {
 		return err
 	}
@@ -223,7 +224,7 @@ func (m *Manager) compress(
 		return nil, err
 	}
 	compressedMessage := schema.SystemMessage(compressed)
-	record, err := makeSummaryEntry(userID, characterID, cutoffRoundID, compressedMessage)
+	record, err := makeSessionSummary(userID, characterID, cutoffRoundID, compressedMessage)
 	if err != nil {
 		m.logCompressionFailure(userID, characterID, trigger, roundCount, cutoffRoundID, startedAt, err)
 		return nil, err
@@ -340,7 +341,7 @@ func runCompressionAgent(ctx context.Context, agent adk.Agent, input []*schema.M
 
 func (m *Manager) loadHistoryWindow(ctx context.Context, userID int64, characterID string) (*historyWindow, error) {
 	window := &historyWindow{}
-	var summary summaryEntry
+	var summary model.SessionSummary
 	err := m.db.WithContext(ctx).
 		Where("user_id = ? AND character_id = ?", userID, characterID).
 		Order("cutoff_round_id DESC").
@@ -367,7 +368,7 @@ func (m *Manager) loadHistoryWindow(ctx context.Context, userID int64, character
 	return window, nil
 }
 
-func decodeHistoryWindow(summary *summaryEntry, rounds []roundEntry) ([]*schema.Message, error) {
+func decodeHistoryWindow(summary *model.SessionSummary, rounds []model.SessionRound) ([]*schema.Message, error) {
 	messages := make([]*schema.Message, 0)
 	if summary != nil {
 		var message *schema.Message
@@ -387,13 +388,13 @@ func decodeHistoryWindow(summary *summaryEntry, rounds []roundEntry) ([]*schema.
 	return messages, nil
 }
 
-func makeRoundEntry(userID int64, characterID string, messages []*schema.Message) (roundEntry, error) {
+func makeSessionRound(userID int64, characterID string, messages []*schema.Message) (model.SessionRound, error) {
 	persisted, _, _ := compactToolResults(messages)
 	data, err := marshalSessionJSON(persisted, "session round")
 	if err != nil {
-		return roundEntry{}, err
+		return model.SessionRound{}, err
 	}
-	return roundEntry{UserID: userID, CharacterID: characterID, Messages: data}, nil
+	return model.SessionRound{UserID: userID, CharacterID: characterID, Messages: data}, nil
 }
 
 func compactToolResults(messages []*schema.Message) ([]*schema.Message, int, int) {
@@ -437,12 +438,12 @@ func compactToolResultContent(content []rune, limit int) string {
 	return string(content[:head]) + string(omitted) + string(content[len(content)-tail:])
 }
 
-func makeSummaryEntry(userID int64, characterID string, cutoffRoundID uint, message *schema.Message) (summaryEntry, error) {
+func makeSessionSummary(userID int64, characterID string, cutoffRoundID uint, message *schema.Message) (model.SessionSummary, error) {
 	data, err := marshalSessionJSON(message, "session summary")
 	if err != nil {
-		return summaryEntry{}, err
+		return model.SessionSummary{}, err
 	}
-	return summaryEntry{
+	return model.SessionSummary{
 		UserID:        userID,
 		CharacterID:   characterID,
 		CutoffRoundID: cutoffRoundID,

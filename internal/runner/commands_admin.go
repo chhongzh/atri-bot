@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chhongzh/atri-bot/internal/account"
+	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
@@ -83,9 +83,9 @@ func (r *Runner) commandAdmin(c telebot.Context, args []string) {
 func (r *Runner) changeAccount(ctx context.Context, actorID, targetID int64, action string) error {
 	switch strings.ToLower(strings.TrimSpace(action)) {
 	case "promote":
-		return r.accounts.SetRole(ctx, actorID, targetID, account.RoleAdmin)
+		return r.accounts.SetRole(ctx, actorID, targetID, model.RoleAdmin)
 	case "demote":
-		return r.accounts.SetRole(ctx, actorID, targetID, account.RoleUser)
+		return r.accounts.SetRole(ctx, actorID, targetID, model.RoleUser)
 	case "ban":
 		return r.accounts.SetBanned(ctx, actorID, targetID, true)
 	case "unban":

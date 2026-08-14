@@ -10,7 +10,7 @@ import (
 func (m *Manager) UserMiddleware(next telebot.HandlerFunc) telebot.HandlerFunc {
 	return func(c telebot.Context) error {
 		sender := c.Sender()
-		user, _, err := m.EnsureUser(context.Background(), sender.ID, sender.Username, utils.TelegramFormatUsername(sender))
+		user, _, err := m.EnsureUser(context.Background(), sender.ID, sender.Username, utils.FormatTelegramUsername(sender))
 		if err != nil {
 			return err
 		}

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/cloudwego/eino/components/tool"
 	toolutils "github.com/cloudwego/eino/components/tool/utils"
@@ -67,7 +68,7 @@ func New(db *gorm.DB, logger *zap.Logger) *Manager {
 }
 
 func (m *Manager) Init() error {
-	return m.db.AutoMigrate(&ConfigRecord{})
+	return m.db.AutoMigrate(&model.ToolConfig{})
 }
 
 func (m *Manager) RegisterAll(registrars ...Registrar) error {
@@ -262,7 +263,7 @@ func (m *Manager) SetConfig(ctx context.Context, userID int64, name string, valu
 	if err != nil {
 		return err
 	}
-	record := ConfigRecord{UserID: userID, ToolName: name, Config: string(normalized)}
+	record := model.ToolConfig{UserID: userID, ToolName: name, Config: string(normalized)}
 	if err = m.db.WithContext(ctx).Save(&record).Error; err != nil {
 		return err
 	}
@@ -315,12 +316,12 @@ func (m *Manager) ConfigJSON(ctx context.Context, userID int64, name string) ([]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrToolNotFound, name)
 	}
-	var record ConfigRecord
+	var record model.ToolConfig
 	err := m.db.WithContext(ctx).
 		Where("user_id = ? AND tool_name = ?", userID, name).
 		First(&record).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		record = ConfigRecord{UserID: userID, ToolName: name, Config: string(registered.defaultConfig)}
+		record = model.ToolConfig{UserID: userID, ToolName: name, Config: string(registered.defaultConfig)}
 		if createErr := m.db.WithContext(ctx).Save(&record).Error; createErr != nil {
 			return nil, createErr
 		}

@@ -1,12 +1,7 @@
-package account
+package model
 
-import "time"
-
-type Role string
-
-const (
-	RoleUser  Role = "user"
-	RoleAdmin Role = "admin"
+import (
+	"time"
 )
 
 type User struct {
@@ -20,6 +15,20 @@ type User struct {
 	UpdatedAt time.Time
 }
 
+type Role string
+
+const (
+	RoleUser  Role = "user"
+	RoleAdmin Role = "admin"
+)
+
+type UserPage struct {
+	Users []User
+	Total int64
+	Page  int
+	Pages int
+}
+
 type Stats struct {
 	Users  int64
 	Admins int64
@@ -31,11 +40,4 @@ type Stats struct {
 type UserListFilter struct {
 	Role   *Role
 	Banned *bool
-}
-
-type UserPage struct {
-	Users []User
-	Total int64
-	Page  int
-	Pages int
 }

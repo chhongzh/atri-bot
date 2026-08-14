@@ -413,7 +413,7 @@ func buildAgentWithTools(
 
 func (m *Manager) renderSystemPrompt(ctx context.Context, state *UserState, c telebot.Context) (string, error) {
 	sender := c.Sender()
-	username := utils.StringsFindFirstNonEmpty(sender.Username, utils.TelegramFormatUsername(sender))
+	username := utils.FindFirstNonEmpty(sender.Username, utils.FormatTelegramUsername(sender))
 	return m.characters.RenderSystemPrompt(ctx, state.CharacterID, username)
 }
 
@@ -483,7 +483,7 @@ func (m *Manager) onAgentEvents(
 	sentBlocks := 0
 	var deliveredBlocks []string
 	streamWriter := utils.NewAssistantStreamWriter(func(text string) error {
-		if err := utils.TelegramSendText(latest.Context, text); err != nil {
+		if err := utils.SendTelegramText(latest.Context, text); err != nil {
 			return err
 		}
 		sentBlocks++

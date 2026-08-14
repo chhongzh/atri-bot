@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
 	"github.com/glebarez/sqlite"
@@ -55,7 +56,7 @@ func TestAppendRoundStoresCompleteTurnLoopRound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var records []roundEntry
+	var records []model.SessionRound
 	if err := db.Order("id ASC").Find(&records).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +86,7 @@ func TestAppendRoundCompactsToolResultsBeforePersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var record roundEntry
+	var record model.SessionRound
 	if err := db.Where("user_id = ? AND character_id = ?", 14, "character.one").First(&record).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +122,7 @@ func TestLoadCompactsLegacyToolResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = db.Create(&roundEntry{
+	if err = db.Create(&model.SessionRound{
 		UserID: 15, CharacterID: "character.one", Messages: string(data),
 	}).Error; err != nil {
 		t.Fatal(err)
@@ -177,14 +178,14 @@ func TestAppendRoundCompressesAtConfiguredRoundLimit(t *testing.T) {
 		t.Fatalf("compression instruction = (%s, %q)", input[len(input)-1].Role, input[len(input)-1].Content)
 	}
 
-	var rounds []roundEntry
+	var rounds []model.SessionRound
 	if err := db.Where("user_id = ? AND character_id = ?", 8, "character.one").Order("id ASC").Find(&rounds).Error; err != nil {
 		t.Fatal(err)
 	}
 	if len(rounds) != 2 {
 		t.Fatalf("stored rounds after compression = %d, want 2", len(rounds))
 	}
-	var summaries []summaryEntry
+	var summaries []model.SessionSummary
 	if err := db.Where("user_id = ? AND character_id = ?", 8, "character.one").Find(&summaries).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -231,14 +232,14 @@ func TestCompressionMergesPreviousSummaryAndRetainsAllRecords(t *testing.T) {
 		schema.AssistantMessage("new reply", nil),
 	}
 	assertMessagesEqual(t, input[:len(input)-1], want)
-	var rounds []roundEntry
+	var rounds []model.SessionRound
 	if err := db.Where("user_id = ? AND character_id = ?", 9, "character.one").Order("id ASC").Find(&rounds).Error; err != nil {
 		t.Fatal(err)
 	}
 	if len(rounds) != 2 {
 		t.Fatalf("stored rounds = %d, want 2", len(rounds))
 	}
-	var summaries []summaryEntry
+	var summaries []model.SessionSummary
 	if err := db.Where("user_id = ? AND character_id = ?", 9, "character.one").Order("id ASC").Find(&summaries).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +281,7 @@ func TestLoadUsesLatestSummaryAndRoundsAfterCutoff(t *testing.T) {
 		schema.AssistantMessage("new reply", nil),
 	})
 	var roundCount int64
-	if err = db.Model(&roundEntry{}).Where("user_id = ? AND character_id = ?", 13, "character.one").Count(&roundCount).Error; err != nil {
+	if err = db.Model(&model.SessionRound{}).Where("user_id = ? AND character_id = ?", 13, "character.one").Count(&roundCount).Error; err != nil {
 		t.Fatal(err)
 	}
 	if roundCount != 3 {
@@ -300,7 +301,7 @@ func TestCompressionFailurePreservesCompleteRounds(t *testing.T) {
 		t.Fatalf("compression error = %v, want %v", err, compressErr)
 	}
 
-	var rounds []roundEntry
+	var rounds []model.SessionRound
 	if err = db.Where("user_id = ? AND character_id = ?", 10, "character.one").Find(&rounds).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -313,7 +314,7 @@ func TestCompressionFailurePreservesCompleteRounds(t *testing.T) {
 	}
 	assertMessagesEqual(t, history, round)
 	var summaryCount int64
-	if err = db.Model(&summaryEntry{}).Where("user_id = ? AND character_id = ?", 10, "character.one").Count(&summaryCount).Error; err != nil {
+	if err = db.Model(&model.SessionSummary{}).Where("user_id = ? AND character_id = ?", 10, "character.one").Count(&summaryCount).Error; err != nil {
 		t.Fatal(err)
 	}
 	if summaryCount != 0 {
@@ -331,7 +332,7 @@ func TestLoadCompressesExistingRoundsAtLimit(t *testing.T) {
 		{schema.UserMessage("one"), schema.AssistantMessage("reply one", nil)},
 		{schema.UserMessage("two"), schema.AssistantMessage("reply two", nil)},
 	} {
-		record, err := makeRoundEntry(11, "character.one", round)
+		record, err := makeSessionRound(11, "character.one", round)
 		if err != nil {
 			t.Fatal(err)
 		}

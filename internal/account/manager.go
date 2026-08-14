@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
+	"github.com/chhongzh/atri-bot/internal/model"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -35,7 +36,7 @@ func New(db *gorm.DB, logger *zap.Logger, configs *configmanager.Manager, defaul
 }
 
 func (m *Manager) Init() error {
-	if err := m.db.AutoMigrate(&User{}); err != nil {
+	if err := m.db.AutoMigrate(&model.User{}); err != nil {
 		return err
 	}
 	if err := m.configs.Init(); err != nil {
@@ -44,11 +45,11 @@ func (m *Manager) Init() error {
 	return nil
 }
 
-func (m *Manager) EnsureUser(ctx context.Context, id int64, username, displayName string) (*User, bool, error) {
+func (m *Manager) EnsureUser(ctx context.Context, id int64, username, displayName string) (*model.User, bool, error) {
 	m.createMu.Lock()
 	defer m.createMu.Unlock()
 
-	var user User
+	var user model.User
 	err := m.db.WithContext(ctx).First(&user, "telegram_id = ?", id).Error
 	if err == nil {
 		updates := map[string]any{}
@@ -73,14 +74,14 @@ func (m *Manager) EnsureUser(ctx context.Context, id int64, username, displayNam
 
 	err = m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var count int64
-		if txErr := tx.Model(&User{}).Count(&count).Error; txErr != nil {
+		if txErr := tx.Model(&model.User{}).Count(&count).Error; txErr != nil {
 			return txErr
 		}
-		role := RoleUser
+		role := model.RoleUser
 		if count == 0 {
-			role = RoleAdmin
+			role = model.RoleAdmin
 		}
-		user = User{
+		user = model.User{
 			TelegramID:  id,
 			Username:    username,
 			DisplayName: displayName,
@@ -102,8 +103,8 @@ func (m *Manager) EnsureUser(ctx context.Context, id int64, username, displayNam
 	return &user, true, nil
 }
 
-func (m *Manager) Get(ctx context.Context, id int64) (*User, error) {
-	var user User
+func (m *Manager) Get(ctx context.Context, id int64) (*model.User, error) {
+	var user model.User
 	err := m.db.WithContext(ctx).First(&user, "telegram_id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrUserNotFound
@@ -134,14 +135,14 @@ func (m *Manager) IsAdmin(ctx context.Context, id int64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return user.Role == RoleAdmin && !user.Banned, nil
+	return user.Role == model.RoleAdmin && !user.Banned, nil
 }
 
-func (m *Manager) SetRole(ctx context.Context, actorID, targetID int64, role Role) error {
-	if role != RoleUser && role != RoleAdmin {
+func (m *Manager) SetRole(ctx context.Context, actorID, targetID int64, role model.Role) error {
+	if role != model.RoleUser && role != model.RoleAdmin {
 		return fmt.Errorf("invalid role %q", role)
 	}
-	if actorID == targetID && role != RoleAdmin {
+	if actorID == targetID && role != model.RoleAdmin {
 		return ErrSelfDemotion
 	}
 
@@ -153,7 +154,7 @@ func (m *Manager) SetRole(ctx context.Context, actorID, targetID int64, role Rol
 		if err != nil {
 			return err
 		}
-		if target.Role == RoleAdmin && role != RoleAdmin {
+		if target.Role == model.RoleAdmin && role != model.RoleAdmin {
 			if err := ensureAnotherAdmin(tx, targetID); err != nil {
 				return err
 			}
@@ -171,7 +172,7 @@ func (m *Manager) SetBanned(ctx context.Context, actorID, targetID int64, banned
 		if err != nil {
 			return err
 		}
-		if banned && target.Role == RoleAdmin {
+		if banned && target.Role == model.RoleAdmin {
 			if err := ensureAnotherAdmin(tx, targetID); err != nil {
 				return err
 			}
@@ -189,7 +190,7 @@ func (m *Manager) Delete(ctx context.Context, actorID, targetID int64) error {
 		if err != nil {
 			return err
 		}
-		if target.Role == RoleAdmin {
+		if target.Role == model.RoleAdmin {
 			if err := ensureAnotherAdmin(tx, targetID); err != nil {
 				return err
 			}
@@ -268,17 +269,17 @@ func (m *Manager) SetMCPMaxTools(ctx context.Context, actorID, targetID int64, v
 	return nil
 }
 
-func (m *Manager) Admins(ctx context.Context) ([]User, error) {
-	var users []User
+func (m *Manager) Admins(ctx context.Context) ([]model.User, error) {
+	var users []model.User
 	err := m.db.WithContext(ctx).
-		Where("role = ? AND banned = ?", RoleAdmin, false).
+		Where("role = ? AND banned = ?", model.RoleAdmin, false).
 		Order("telegram_id ASC").
 		Find(&users).Error
 	return users, err
 }
 
 // ListPage returns account identity and status fields for administrator views.
-func (m *Manager) ListPage(ctx context.Context, filter UserListFilter, page, pageSize int) (*UserPage, error) {
+func (m *Manager) ListPage(ctx context.Context, filter model.UserListFilter, page, pageSize int) (*model.UserPage, error) {
 	if page <= 0 {
 		return nil, errors.New("page must be positive")
 	}
@@ -286,14 +287,14 @@ func (m *Manager) ListPage(ctx context.Context, filter UserListFilter, page, pag
 		return nil, errors.New("page size must be positive")
 	}
 	query := m.db.WithContext(ctx).
-		Model(&User{})
+		Model(&model.User{})
 	if filter.Role != nil {
 		query = query.Where("role = ?", *filter.Role)
 	}
 	if filter.Banned != nil {
 		query = query.Where("banned = ?", *filter.Banned)
 	}
-	result := &UserPage{Page: page}
+	result := &model.UserPage{Page: page}
 	if err := query.Count(&result.Total).Error; err != nil {
 		return nil, err
 	}
@@ -312,37 +313,37 @@ func (m *Manager) ListPage(ctx context.Context, filter UserListFilter, page, pag
 	return result, nil
 }
 
-func (m *Manager) Stats(ctx context.Context) (*Stats, error) {
-	stats := new(Stats)
+func (m *Manager) Stats(ctx context.Context) (*model.Stats, error) {
+	stats := new(model.Stats)
 	db := m.db.WithContext(ctx)
-	if err := db.Model(&User{}).Count(&stats.Users).Error; err != nil {
+	if err := db.Model(&model.User{}).Count(&stats.Users).Error; err != nil {
 		return nil, err
 	}
-	if err := db.Model(&User{}).Where("role = ?", RoleAdmin).Count(&stats.Admins).Error; err != nil {
+	if err := db.Model(&model.User{}).Where("role = ?", model.RoleAdmin).Count(&stats.Admins).Error; err != nil {
 		return nil, err
 	}
-	if err := db.Model(&User{}).Where("banned = ?", true).Count(&stats.Banned).Error; err != nil {
+	if err := db.Model(&model.User{}).Where("banned = ?", true).Count(&stats.Banned).Error; err != nil {
 		return nil, err
 	}
 	return stats, nil
 }
 
 func requireAdmin(tx *gorm.DB, id int64) error {
-	var actor User
+	var actor model.User
 	if err := tx.First(&actor, "telegram_id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrUserNotFound
 		}
 		return err
 	}
-	if actor.Role != RoleAdmin || actor.Banned {
+	if actor.Role != model.RoleAdmin || actor.Banned {
 		return ErrPermissionDenied
 	}
 	return nil
 }
 
-func loadTargetUser(tx *gorm.DB, targetID int64) (*User, error) {
-	var target User
+func loadTargetUser(tx *gorm.DB, targetID int64) (*model.User, error) {
+	var target model.User
 	if err := tx.First(&target, "telegram_id = ?", targetID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrUserNotFound
@@ -354,8 +355,8 @@ func loadTargetUser(tx *gorm.DB, targetID int64) (*User, error) {
 
 func ensureAnotherAdmin(tx *gorm.DB, excludedID int64) error {
 	var count int64
-	err := tx.Model(&User{}).
-		Where("role = ? AND banned = ? AND telegram_id <> ?", RoleAdmin, false, excludedID).
+	err := tx.Model(&model.User{}).
+		Where("role = ? AND banned = ? AND telegram_id <> ?", model.RoleAdmin, false, excludedID).
 		Count(&count).Error
 	if err != nil {
 		return err
