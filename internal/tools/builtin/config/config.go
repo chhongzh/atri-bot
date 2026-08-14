@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package config
 
 import (
@@ -57,9 +60,9 @@ func Register(manager *toolmanager.Manager) error {
 		GetToolConfigName,
 		"查询当前用户某个工具的单个配置项。先用 list_configurable_tools 获取可配置工具名。",
 		func(ctx context.Context, input *getToolConfigInput) (*toolConfigValueResult, error) {
-			state, ok := toolmanager.RunningStateFromContext(ctx)
-			if !ok {
-				return nil, toolmanager.ErrRunningStateMissing
+			state, err := toolmanager.RequireRunningState(ctx)
+			if err != nil {
+				return nil, err
 			}
 			toolName, err := requiredToolName(input.ToolName)
 			if err != nil {
@@ -80,9 +83,9 @@ func Register(manager *toolmanager.Manager) error {
 		ConfigureToolName,
 		"修改当前用户某个工具的单个配置项。path 必须是已有配置项，value 类型必须与配置定义一致。",
 		func(ctx context.Context, input *configureToolInput) (*toolConfigValueResult, error) {
-			state, ok := toolmanager.RunningStateFromContext(ctx)
-			if !ok {
-				return nil, toolmanager.ErrRunningStateMissing
+			state, err := toolmanager.RequireRunningState(ctx)
+			if err != nil {
+				return nil, err
 			}
 			if input.Value == nil {
 				return nil, errors.New("tool config value is required")

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package webread
 
 import (
@@ -20,9 +23,6 @@ const (
 
 //go:embed inject.js
 var injectScript string
-
-//go:embed Readability.js
-var readabilityScript string
 
 type config struct {
 }
@@ -98,7 +98,7 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 func BindedRegister(logger *zap.Logger, browser *rod.Browser) func(manager *toolmanager.Manager) error {
 	logger = logger.Named("webread tool")
 	fn := func(manager *toolmanager.Manager) error {
-		return toolmanager.Register(manager, toolName, toolDescription, config{},
+		return manager.Register(toolName, toolDescription, config{},
 			func(ctx context.Context, runningState *toolmanager.RunningState, cfg *config, input *input) (*result, error) {
 				return tool(ctx, runningState, cfg, input, logger, browser)
 			})

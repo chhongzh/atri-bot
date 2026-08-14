@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package config
 
 import (
@@ -7,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -22,35 +26,35 @@ func New(db *gorm.DB) *Manager {
 }
 
 func (m *Manager) Init() error {
-	return m.db.AutoMigrate(&Record{})
+	return m.db.AutoMigrate(&model.Config{})
 }
 
 // Query decodes a global configuration value directly from its JSON record.
 func (m *Manager) Query[T any](ctx context.Context, key string) (T, error) {
-	return query[T](ctx, m, globalScope, 0, key)
+	return query[T](ctx, m, model.GlobalScope, 0, key)
 }
 
 // QueryUser decodes a user-specific configuration value directly from JSON.
 func (m *Manager) QueryUser[T any](ctx context.Context, userID int64, key string) (T, error) {
-	return query[T](ctx, m, userScope, userID, key)
+	return query[T](ctx, m, model.UserScope, userID, key)
 }
 
 func (m *Manager) Set[T any](ctx context.Context, key string, value T) error {
-	return set(ctx, m, globalScope, 0, key, value)
+	return set(ctx, m, model.GlobalScope, 0, key, value)
 }
 
 func (m *Manager) SetUser[T any](ctx context.Context, userID int64, key string, value T) error {
-	return set(ctx, m, userScope, userID, key, value)
+	return set(ctx, m, model.UserScope, userID, key, value)
 }
 
 func query[T any](ctx context.Context, manager *Manager, scope string, userID int64, key string) (T, error) {
 	var zero T
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return zero, errors.New("configuration key is required")
+	key, err := normalizeKey(key)
+	if err != nil {
+		return zero, err
 	}
-	var record Record
-	err := manager.db.WithContext(ctx).First(&record, "scope = ? AND user_id = ? AND key = ?", scope, userID, key).Error
+	var record model.Config
+	err = manager.db.WithContext(ctx).First(&record, "scope = ? AND user_id = ? AND key = ?", scope, userID, key).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return zero, fmt.Errorf("%w: %s", ErrNotFound, key)
 	}
@@ -64,15 +68,15 @@ func query[T any](ctx context.Context, manager *Manager, scope string, userID in
 }
 
 func set[T any](ctx context.Context, manager *Manager, scope string, userID int64, key string, value T) error {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return errors.New("configuration key is required")
+	key, err := normalizeKey(key)
+	if err != nil {
+		return err
 	}
 	data, err := json.Marshal(value)
 	if err != nil {
 		return fmt.Errorf("encode configuration %q: %w", key, err)
 	}
-	record := Record{Scope: scope, UserID: userID, Key: key, Value: string(data)}
+	record := model.Config{Scope: scope, UserID: userID, Key: key, Value: string(data)}
 	return manager.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "scope"},
@@ -81,4 +85,12 @@ func set[T any](ctx context.Context, manager *Manager, scope string, userID int6
 		},
 		DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
 	}).Create(&record).Error
+}
+
+func normalizeKey(key string) (string, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", errors.New("configuration key is required")
+	}
+	return key, nil
 }

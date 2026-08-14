@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package runner
 
 import (
@@ -28,7 +31,7 @@ func (r *Runner) commandProviders(c telebot.Context, _ []string) {
 func (r *Runner) commandProvider(c telebot.Context, args []string) {
 	action := commandAction(args, "")
 	if action == "" {
-		r.commandError(c, fmt.Errorf("用法：/provider <add|set|remove|refresh> ..."))
+		r.commandError(c, fmt.Errorf("用法：/provider <add|set|remove|refresh>"))
 		return
 	}
 	if action == "list" {
@@ -85,18 +88,19 @@ func (r *Runner) listCharacterProviders(c telebot.Context, ctx context.Context) 
 		_ = r.sendSystemResultAndDelete(c, "当前没有可用角色 Provider。")
 		return
 	}
-	var builder strings.Builder
-	builder.WriteString("角色 Providers：\n")
-	for _, record := range records {
-		location := record.URL
-		if location == "" {
-			location = record.Path
+	_ = r.sendListResult(c, func(builder *strings.Builder) error {
+		builder.WriteString("角色 Providers：\n")
+		for _, record := range records {
+			location := record.URL
+			if location == "" {
+				location = record.Path
+			}
+			if record.Branch == "" {
+				fmt.Fprintf(builder, "- %s — %s（%s）\n", record.ID, location, record.Kind)
+				continue
+			}
+			fmt.Fprintf(builder, "- %s — %s（%s，%s）\n", record.ID, location, record.Kind, record.Branch)
 		}
-		if record.Branch == "" {
-			fmt.Fprintf(&builder, "- %s — %s（%s）\n", record.ID, location, record.Kind)
-			continue
-		}
-		fmt.Fprintf(&builder, "- %s — %s（%s，%s）\n", record.ID, location, record.Kind, record.Branch)
-	}
-	_ = r.sendSystemResultAndDelete(c, strings.TrimSpace(builder.String()))
+		return nil
+	})
 }

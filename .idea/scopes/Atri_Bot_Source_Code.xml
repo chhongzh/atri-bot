@@ -1,0 +1,3 @@
+<component name="DependencyValidationManager">
+  <scope name="Atri Bot Source Code" pattern="(file[atri-bot]:internal//*||file[atri-bot]:cmd//*)&amp;&amp;!file[atri-bot]:internal/msgops//*&amp;&amp;!file:internal/tools/webread/Readability.js&amp;&amp;!file:internal/tools/webread/stealth/stealth.min.js&amp;&amp;!file:internal/tools/webread/stealth/LICENSE" />
+</component>

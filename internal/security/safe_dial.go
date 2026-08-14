@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package security
 
 import (
@@ -32,17 +35,9 @@ func (s *SafeDialer) DialContext(ctx context.Context, network, address string) (
 	if IsInternalHost(host) {
 		return nil, ErrPrivateAddressBlocked
 	}
-	addresses, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	addresses, err := lookupPublicAddresses(ctx, host, "dial host")
 	if err != nil {
-		return nil, fmt.Errorf("resolve dial host: %w", err)
-	}
-	if len(addresses) == 0 {
-		return nil, errors.New("dial host resolved to no addresses")
-	}
-	for _, resolved := range addresses {
-		if IsPrivateIP(resolved.IP) {
-			return nil, ErrPrivateAddressBlocked
-		}
+		return nil, err
 	}
 
 	var lastErr error
@@ -61,6 +56,13 @@ func (s *SafeDialer) DialContext(ctx context.Context, network, address string) (
 func NewSafeHTTPTransport(transport *http.Transport, allowPrivateIP bool) http.RoundTripper {
 	transport.DialContext = NewSafeDialer(&net.Dialer{}, allowPrivateIP).DialContext
 	return &safeHTTPTransport{transport: transport, allowPrivateIP: allowPrivateIP}
+}
+
+// DefaultSafeHTTPTransport returns a clone of http.DefaultTransport wrapped with
+// the private-network protection policy.
+func DefaultSafeHTTPTransport(allowPrivateIP bool) http.RoundTripper {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	return NewSafeHTTPTransport(transport, allowPrivateIP)
 }
 
 type safeHTTPTransport struct {
@@ -94,19 +96,24 @@ func ValidateHost(ctx context.Context, host string) error {
 	if IsInternalHost(host) {
 		return ErrPrivateAddressBlocked
 	}
+	_, err := lookupPublicAddresses(ctx, host, "host")
+	return err
+}
+
+func lookupPublicAddresses(ctx context.Context, host, subject string) ([]net.IPAddr, error) {
 	addresses, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 	if err != nil {
-		return fmt.Errorf("resolve host: %w", err)
+		return nil, fmt.Errorf("resolve %s: %w", subject, err)
 	}
 	if len(addresses) == 0 {
-		return errors.New("host resolved to no addresses")
+		return nil, fmt.Errorf("%s resolved to no addresses", subject)
 	}
 	for _, address := range addresses {
 		if IsPrivateIP(address.IP) {
-			return ErrPrivateAddressBlocked
+			return nil, ErrPrivateAddressBlocked
 		}
 	}
-	return nil
+	return addresses, nil
 }
 
 func NewSafeDialer(base proxy.ContextDialer, allowPrivateIP bool) *SafeDialer {

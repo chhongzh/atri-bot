@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package runner
 
 import (
@@ -37,6 +40,14 @@ func (r *Runner) commandError(c telebot.Context, err error) {
 		append(utils.ExpandTelebotContext(c), zap.Error(err))...,
 	)
 	_ = r.sendSystemResultAndDelete(c, "操作失败："+err.Error())
+}
+
+func (r *Runner) sendListResult(c telebot.Context, build func(*strings.Builder) error) error {
+	var builder strings.Builder
+	if err := build(&builder); err != nil {
+		return err
+	}
+	return r.sendSystemResultAndDelete(c, strings.TrimSpace(builder.String()))
 }
 
 func commandAction(args []string, defaultAction string) string {

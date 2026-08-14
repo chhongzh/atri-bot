@@ -5,13 +5,16 @@ package model
 
 import "time"
 
-// ToolPermission records an individual user's permission for one tool.
-// When no record exists for a user, the configured default applies.
-type ToolPermission struct {
+type ToolConfig struct {
 	UserID   int64  `gorm:"primaryKey;autoIncrement:false"`
 	ToolName string `gorm:"primaryKey;size:255"`
-	Allowed  bool   `gorm:"not null"`
+	Config   string `gorm:"type:json;not null"`
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+// TableName keeps the table name stable at tool_config_records.
+func (ToolConfig) TableName() string {
+	return "tool_config_records"
 }

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package utils
 
 import (
@@ -9,8 +12,8 @@ import (
 
 const telegramTextLimit = 4096
 
-func TelegramSendText(c telebot.Context, text string) error {
-	for _, part := range TelegramSplitText(text, telegramTextLimit) {
+func SendTelegramText(c telebot.Context, text string) error {
+	for _, part := range SplitTelegramText(text, telegramTextLimit) {
 		if err := c.Send(part); err != nil {
 			return err
 		}
@@ -18,19 +21,19 @@ func TelegramSendText(c telebot.Context, text string) error {
 	return nil
 }
 
-func TelegramSplitText(text string, limit int) []string {
+func SplitTelegramText(text string, limit int) []string {
 	blocks := strings.Split(text, "\n\n")
 	parts := make([]string, 0, len(blocks))
 	for _, block := range blocks {
 		if block == "" {
 			continue
 		}
-		parts = append(parts, telegramSplitTextBlock(block, limit)...)
+		parts = append(parts, splitTelegramTextBlock(block, limit)...)
 	}
 	return parts
 }
 
-func telegramSplitTextBlock(text string, limit int) []string {
+func splitTelegramTextBlock(text string, limit int) []string {
 	if limit <= 0 || utf8.RuneCountInString(text) <= limit {
 		return []string{text}
 	}
@@ -49,6 +52,6 @@ func telegramSplitTextBlock(text string, limit int) []string {
 	return parts
 }
 
-func TelegramFormatUsername(user *telebot.User) string {
+func FormatTelegramUsername(user *telebot.User) string {
 	return strings.TrimSpace(strings.Join([]string{user.FirstName, user.LastName}, " "))
 }

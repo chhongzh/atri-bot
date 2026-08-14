@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package model
 
 import "time"
@@ -9,7 +12,8 @@ const (
 	ProviderRemote ProviderKind = "remote"
 )
 
-type ProviderRecord struct {
+// Provider records a character provider in the database.
+type Provider struct {
 	ID        string       `gorm:"primaryKey;size:128"`
 	Kind      ProviderKind `gorm:"type:varchar(16);not null"`
 	URL       string
@@ -19,6 +23,11 @@ type ProviderRecord struct {
 	Enabled   bool `gorm:"not null;default:true"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+// TableName keeps the table name stable at provider_records.
+func (Provider) TableName() string {
+	return "provider_records"
 }
 
 type Character struct {

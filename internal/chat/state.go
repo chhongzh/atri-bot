@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package chat
 
 import (
@@ -55,7 +58,6 @@ func (s *UserState) activeUser() ActiveUser {
 	}
 }
 
-// agent returns the agent built for this state.
 func (s *UserState) agent() *adk.ChatModelAgent {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

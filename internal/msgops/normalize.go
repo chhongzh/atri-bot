@@ -45,18 +45,6 @@ func NormalizeForSession[M adk.MessageType](msg M) M {
 	return any(normalizeAgenticMessage(agenticMsg)).(M)
 }
 
-// NormalizeMessagesForModelInput prepares stored messages before passing them
-// back to Runner/ChatModel. Today this matches NormalizeForSession; keeping the
-// boundary explicit makes provider-specific input rules easy to evolve without
-// changing the session file format.
-func NormalizeMessagesForModelInput[M adk.MessageType](messages []M) []M {
-	out := make([]M, 0, len(messages))
-	for _, msg := range messages {
-		out = append(out, NormalizeForSession(msg))
-	}
-	return out
-}
-
 func normalizeAgenticMessage(msg *schema.AgenticMessage) *schema.AgenticMessage {
 	if msg == nil {
 		return nil

@@ -1,8 +1,11 @@
-package session
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
+package model
 
 import "time"
 
-type roundEntry struct {
+type SessionRound struct {
 	ID          uint      `gorm:"primaryKey"`
 	CreatedAt   time.Time `gorm:"not null"`
 	UserID      int64     `gorm:"not null;index:idx_session_rounds_session_order,priority:1"`
@@ -10,11 +13,11 @@ type roundEntry struct {
 	Messages    string    `gorm:"type:json;not null"`
 }
 
-func (roundEntry) TableName() string {
+func (SessionRound) TableName() string {
 	return "session_rounds"
 }
 
-type summaryEntry struct {
+type SessionSummary struct {
 	ID            uint      `gorm:"primaryKey"`
 	CreatedAt     time.Time `gorm:"not null"`
 	UserID        int64     `gorm:"not null;index:idx_session_summaries_latest,priority:1"`
@@ -23,6 +26,6 @@ type summaryEntry struct {
 	Message       string    `gorm:"type:json;not null"`
 }
 
-func (summaryEntry) TableName() string {
+func (SessionSummary) TableName() string {
 	return "session_summaries"
 }

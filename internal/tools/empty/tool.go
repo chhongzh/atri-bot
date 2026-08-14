@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 // Package empty 提供了一个空的tool的代码模板
 package empty
 
@@ -21,7 +24,7 @@ func tool(ctx context.Context, cfg *config, input *input) (*result, error) {
 }
 
 func Register(manager *toolmanager.Manager) error {
-	return toolmanager.Register(manager, "tool", "tool desc", config{},
+	return manager.Register("tool", "tool desc", config{},
 		func(ctx context.Context, _ *toolmanager.RunningState, cfg *config, input *input) (*result, error) {
 			return tool(ctx, cfg, input)
 		})

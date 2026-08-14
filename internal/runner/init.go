@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package runner
 
 import (
@@ -135,11 +138,10 @@ func (r *Runner) Init(ctx context.Context) error {
 }
 
 func (r *Runner) initBot() error {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
 	bot, err := telebot.NewBot(telebot.Settings{
 		Token: r.cfg.BotToken,
 		Client: &http.Client{
-			Transport: security.NewSafeHTTPTransport(transport, r.cfg.AllowPrivateIP),
+			Transport: security.DefaultSafeHTTPTransport(r.cfg.AllowPrivateIP),
 		},
 		OnError: r.handlerForError,
 	})

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package runner
 
 import (
@@ -75,27 +78,30 @@ func (r *Runner) commandToolPerm(c telebot.Context, args []string) {
 func (r *Runner) showToolPermissions(c telebot.Context, ctx context.Context, targetID int64) {
 	names := r.tools.PermissionNames()
 	sort.Strings(names)
-	var builder strings.Builder
-	fmt.Fprintf(&builder, "用户 %d 的工具权限：\n", targetID)
-	for _, name := range names {
-		info, err := r.chats.ToolPermissionInfo(ctx, targetID, name)
-		if err != nil {
-			r.commandError(c, err)
-			return
+	if err := r.sendListResult(c, func(builder *strings.Builder) error {
+		fmt.Fprintf(builder, "用户 %d 的工具权限：\n", targetID)
+		for _, name := range names {
+			info, err := r.chats.ToolPermissionInfo(ctx, targetID, name)
+			if err != nil {
+				return err
+			}
+			state := "禁止"
+			if info.Allowed {
+				state = "允许"
+			}
+			defaultState := "禁止"
+			if info.Default {
+				defaultState = "允许"
+			}
+			marker := ""
+			if info.Custom {
+				marker = "（自定义）"
+			}
+			fmt.Fprintf(builder, "- %s：%s（默认 %s）%s\n", name, state, defaultState, marker)
 		}
-		state := "禁止"
-		if info.Allowed {
-			state = "允许"
-		}
-		defaultState := "禁止"
-		if info.Default {
-			defaultState = "允许"
-		}
-		marker := ""
-		if info.Custom {
-			marker = "（自定义）"
-		}
-		fmt.Fprintf(&builder, "- %s：%s（默认 %s）%s\n", name, state, defaultState, marker)
+		return nil
+	}); err != nil {
+		r.commandError(c, err)
+		return
 	}
-	_ = r.sendSystemResultAndDelete(c, strings.TrimSpace(builder.String()))
 }

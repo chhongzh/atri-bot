@@ -1,8 +1,11 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package utils
 
 import "strings"
 
-func GitNormalizeRepoURL(value string) string {
+func NormalizeGitRepoURL(value string) string {
 	value = strings.TrimSpace(value)
 	if strings.HasPrefix(value, "github.com/") {
 		return "https://" + value

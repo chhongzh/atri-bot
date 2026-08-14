@@ -17,7 +17,6 @@
 package msgops
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -55,32 +54,4 @@ func KindOf[M adk.MessageType]() Kind {
 	default:
 		return KindMessage
 	}
-}
-
-// DefaultSessionDir returns the default session directory for the current kind.
-func DefaultSessionDir(kind Kind) string {
-	if kind == KindAgentic {
-		if dir := strings.TrimSpace(os.Getenv("SESSION_DIR_AGENTIC")); dir != "" {
-			return dir
-		}
-		return "./data/sessions_agentic"
-	}
-	if dir := strings.TrimSpace(os.Getenv("SESSION_DIR")); dir != "" {
-		return dir
-	}
-	return "./data/sessions"
-}
-
-// ValidateKind rejects files written for a different message representation.
-func ValidateKind(stored, target Kind, legacyMessageOK bool) error {
-	if stored == "" && target == KindMessage && legacyMessageOK {
-		return nil
-	}
-	if stored == "" {
-		return fmt.Errorf("session file has no message_kind; current MESSAGE_KIND=%s", target)
-	}
-	if stored != target {
-		return fmt.Errorf("session file uses message_kind=%s; current MESSAGE_KIND=%s", stored, target)
-	}
-	return nil
 }

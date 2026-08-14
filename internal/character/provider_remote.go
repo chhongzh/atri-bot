@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package character
 
 import (
@@ -20,7 +23,7 @@ type RemoteProvider struct {
 }
 
 func NewRemoteProvider(id, url, branch, root string) *RemoteProvider {
-	return &RemoteProvider{id: id, url: utils.GitNormalizeRepoURL(url), branch: branch, root: root}
+	return &RemoteProvider{id: id, url: utils.NormalizeGitRepoURL(url), branch: branch, root: root}
 }
 
 func (p *RemoteProvider) ID() string {

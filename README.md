@@ -38,21 +38,26 @@
 
 ## 项目简介
 
-atri-bot 是一个跑在 Telegram 上的角色聊天机器人。多数同类项目把功夫花在扮演上，人设丰满，台词动人，剧情能陪你演很久，但角色对现实世界没有任何手段。atri-bot 受 openclaw 这类 agent 项目的启发，在扮演能力之外加了工具能力。角色可以自己决定调用什么工具，把结果带回对话里继续聊。它是你喜欢的那个角色，同时手里有工具。
+atri-bot 是一个跑在 Telegram 上的角色聊天机器人。多数同类项目把功夫花在扮演上，人设丰满，台词动人，剧情能陪你演很久，但角色对现实世界没有任何手段。atri-bot
+受 openclaw 这类 agent 项目的启发，在扮演能力之外加了工具能力。角色可以自己决定调用什么工具，把结果带回对话里继续聊。它是你喜欢的那个角色，同时手里有工具。
 
-项目的出发点是把二次元角色带到现实。想要天气就自己查，想发邮件就自己发，想通过 MCP 接外部服务也可以。工具目前的重点在 MCP，内置工具里发送邮件和热点搜索已经能用，其余还在开发。
+项目的出发点是把二次元角色带到现实。想要天气就自己查，想发邮件就自己发，想通过 MCP 接外部服务也可以。工具目前的重点在
+MCP，内置工具里发送邮件和热点搜索已经能用，其余还在开发。
 
 机器人是多用户的。每个用户有独立的 AI 连接配置、角色、会话历史和工具权限，互相不干扰。切换角色随时可以，会话历史按角色隔离，不会串戏。
 
 ### 官方实例（最后选择）
 
-建议优先自己部署。运行只需要一个可执行文件，按下面的步骤来，几分钟就能跑起来。官方公共机器人 [@AtriBotIsAChatBot](https://t.me/AtriBotIsAChatBot) 是给想先体验、或者暂时没有条件部署的人用的，属于最后的选择。官方实例有两处限制，不允许访问内网地址，也不承诺 100% 在线，大多数时候在线。自部署没有这些限制，数据也完全在自己手里。
+建议优先自己部署。运行只需要一个可执行文件，按下面的步骤来，几分钟就能跑起来。官方公共机器人 [@AtriBotIsAChatBot](https://t.me/AtriBotIsAChatBot)
+是给想先体验、或者暂时没有条件部署的人用的，属于最后的选择。官方实例有两处限制，不允许访问内网地址，也不承诺 100%
+在线，大多数时候在线。自部署没有这些限制，数据也完全在自己手里。
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
 ## 开始使用
 
-运行 atri-bot 只需要一个可执行文件。项目用 Go 编译成单个二进制，数据库内嵌在程序里，不需要安装任何运行时环境。内存占用低，响应快。Windows、macOS、Linux 和 Android（arm64 / amd64）都有现成的构建产物。
+运行 atri-bot 只需要一个可执行文件。项目用 Go 编译成单个二进制，数据库内嵌在程序里，不需要安装任何运行时环境。内存占用低，响应快。Windows、macOS、Linux
+和 Android（arm64 / amd64）都有现成的构建产物。
 
 ### 准备工作
 
@@ -79,7 +84,7 @@ telegram:
 default:
   max_rounds: 36            # 新用户会话轮数上限
   mcp_max_tools: 128        # 每用户 MCP provider 上限
-  tool_permissions: {}      # 新用户工具默认权限
+  tool_permissions: { }      # 新用户工具默认权限
 
 # 网络安全
 security:
@@ -118,7 +123,10 @@ atri_cwd: "."
 各项配置的含义如下。
 
 - `telegram.bot_token` 必填，机器人的 token。
-- `default.max_rounds` 新用户压缩会话历史前保留的完整 Telegram 轮数，之后每个用户可以用 `/ai rounds` 单独修改。一次 TurnLoop 从收到的一组 user 消息开始，包含其间所有 assistant、tool call 和 tool result，直到最终 assistant 回复结束，整体计为一轮。达到上限后会先阻塞新一轮，用该用户自己的模型生成带 cutoff 的 system history；原始轮次继续保留，后续加载只读取最新 system history 与 cutoff 之后的新轮次。
+- `default.max_rounds` 新用户压缩会话历史前保留的完整 Telegram 轮数，之后每个用户可以用 `/ai rounds` 单独修改。一次
+  TurnLoop 从收到的一组 user 消息开始，包含其间所有 assistant、tool call 和 tool result，直到最终 assistant
+  回复结束，整体计为一轮。达到上限后会先阻塞新一轮，用该用户自己的模型生成带 cutoff 的 system history；原始轮次继续保留，后续加载只读取最新
+  system history 与 cutoff 之后的新轮次。
 - `default.mcp_max_tools` 每个用户可添加的 MCP provider 上限，默认 128，管理员可用 `/mcp limit` 单独覆盖。
 - `default.tool_permissions` 新用户的默认工具权限映射。
 - `security.allow_private_ip` 是否允许用户配置的网络出口访问 localhost、内网域名和私网 IP，默认 false。
@@ -146,7 +154,8 @@ atri_cwd: "."
 
 ### 工具与 MCP
 
-工具权限按用户隔离。被禁用的工具会从模型可见的工具列表里消失，模型根本看不到它，对话也不会被反复打断。管理员用 `/toolperm` 管理。
+工具权限按用户隔离。被禁用的工具会从模型可见的工具列表里消失，模型根本看不到它，对话也不会被反复打断。管理员用 `/toolperm`
+管理。
 
 ```text
 /toolperm list <用户ID>
@@ -155,7 +164,8 @@ atri_cwd: "."
 /toolperm reset <用户ID> <工具名>
 ```
 
-MCP 是当前工具能力的重点。角色通过 MCP 协议调用外部服务，具体能做什么取决于你添加的 provider。权限名 `mcp` 是总开关，`/toolperm deny <用户ID> mcp` 可以一键禁用某用户的全部 MCP 能力。
+MCP 是当前工具能力的重点。角色通过 MCP 协议调用外部服务，具体能做什么取决于你添加的 provider。权限名 `mcp` 是总开关，
+`/toolperm deny <用户ID> mcp` 可以一键禁用某用户的全部 MCP 能力。
 
 ```text
 /toolperm deny <用户ID> mcp
@@ -171,9 +181,12 @@ MCP 是当前工具能力的重点。角色通过 MCP 协议调用外部服务�
 
 ### 角色与 chardef
 
-角色文件用 YAML 编写，遵循 [chardef 规范](https://github.com/mihari-bot/chardef-spec)。本地角色放在 `<atri_cwd>/chardefs/<角色ID>.yaml`，文件名去掉扩展名就是角色 ID。
+角色文件用 YAML 编写，遵循 [chardef 规范](https://github.com/mihari-bot/chardef-spec)。本地角色放在
+`<atri_cwd>/chardefs/<角色ID>.yaml`，文件名去掉扩展名就是角色 ID。
 
-项目默认从 [mihari-bot/chardef](https://github.com/mihari-bot/chardef) 的 `v2` 分支加载角色，这个仓库欢迎所有人提交。想优化某个角色的提示词，或者为自己喜欢的角色写一份人设文件，直接去那里开 PR。提示词决定角色怎么说话、怎么用工具，是角色体验的核心。
+项目默认从 [mihari-bot/chardef](https://github.com/mihari-bot/chardef) 的 `v2`
+分支加载角色，这个仓库欢迎所有人提交。想优化某个角色的提示词，或者为自己喜欢的角色写一份人设文件，直接去那里开
+PR。提示词决定角色怎么说话、怎么用工具，是角色体验的核心。
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
@@ -187,13 +200,15 @@ MCP 是当前工具能力的重点。角色通过 MCP 协议调用外部服务�
 
 ### 明确不做的事
 
-插件系统不打算做。插件能提供的能力，MCP 都能提供，角色通过 MCP 接外部服务已经覆盖了这部分场景。Web 管理界面同样不打算做，配置用 Telegram 里的命令就够，没必要再做一个网页。
+插件系统不打算做。插件能提供的能力，MCP 都能提供，角色通过 MCP 接外部服务已经覆盖了这部分场景。Web 管理界面同样不打算做，配置用
+Telegram 里的命令就够，没必要再做一个网页。
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
 ## 参与贡献
 
-任何形式的贡献都欢迎，代码、文档、测试、问题反馈都可以。最轻的入门方式是去 [mihari-bot/chardef](https://github.com/mihari-bot/chardef) 写一个角色，或者改进现有角色的提示词。这不碰代码，却直接决定角色的体验。
+任何形式的贡献都欢迎，代码、文档、测试、问题反馈都可以。最轻的入门方式是去 [mihari-bot/chardef](https://github.com/mihari-bot/chardef)
+写一个角色，或者改进现有角色的提示词。这不碰代码，却直接决定角色的体验。
 
 代码贡献的流程和其他开源项目一样。先 fork，再开分支，最后提 Pull Request。
 
@@ -207,7 +222,9 @@ MCP 是当前工具能力的重点。角色通过 MCP 协议调用外部服务�
 
 ### 发布
 
-PR 或分支推送时，CI 会自动跑一次 goreleaser snapshot，验证所有目标平台都能编译，不创建 Release。手动发布在 GitHub Actions 里触发，填版本号和是否草稿。版本号自动补 `v` 前缀并打 tag，默认以草稿形式发布，确认无误后在 Release 页面手动发布。Android 产物在 CI 中用 Android NDK 交叉编译。
+PR 或分支推送时，CI 会自动跑一次 goreleaser snapshot，验证所有目标平台都能编译，不创建 Release。手动发布在 GitHub Actions
+里触发，填版本号和是否草稿。版本号自动补 `v` 前缀并打 tag，默认以草稿形式发布，确认无误后在 Release 页面手动发布。Android 产物在
+CI 中用 Android NDK 交叉编译。
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
@@ -219,7 +236,8 @@ PR 或分支推送时，CI 会自动跑一次 goreleaser snapshot，验证所有
 
 ## 联系方式
 
-官方机器人是 [@AtriBotIsAChatBot](https://t.me/AtriBotIsAChatBot)，项目主页在 [https://github.com/chhongzh/atri-bot](https://github.com/chhongzh/atri-bot)。欢迎到仓库的 issue 区反馈问题。
+官方机器人是 [@AtriBotIsAChatBot](https://t.me/AtriBotIsAChatBot)
+，项目主页在 [https://github.com/chhongzh/atri-bot](https://github.com/chhongzh/atri-bot)。欢迎到仓库的 issue 区反馈问题。
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 

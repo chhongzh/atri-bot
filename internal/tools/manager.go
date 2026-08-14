@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package tools
 
 import (
@@ -8,10 +11,11 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"regexp"
 	"strings"
 	"sync"
 
+	"github.com/chhongzh/atri-bot/internal/model"
+	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/cloudwego/eino/components/tool"
 	toolutils "github.com/cloudwego/eino/components/tool/utils"
 	"github.com/tidwall/gjson"
@@ -25,8 +29,6 @@ var (
 	ErrToolNotFound        = errors.New("tool not found")
 	ErrConfigPathNotFound  = errors.New("tool config path not found")
 )
-
-var configPathPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*(?:\.(?:[A-Za-z_][A-Za-z0-9_-]*|[0-9]+))*$`)
 
 type ConfiguredFunc[C, I, O any] func(
 	ctx context.Context,
@@ -69,7 +71,7 @@ func New(db *gorm.DB, logger *zap.Logger) *Manager {
 }
 
 func (m *Manager) Init() error {
-	return m.db.AutoMigrate(&ConfigRecord{})
+	return m.db.AutoMigrate(&model.ToolConfig{})
 }
 
 func (m *Manager) RegisterAll(registrars ...Registrar) error {
@@ -81,8 +83,7 @@ func (m *Manager) RegisterAll(registrars ...Registrar) error {
 	return nil
 }
 
-func Register[C, I, O any](
-	manager *Manager,
+func (m *Manager) Register[C, I, O any](
 	name, description string,
 	defaultConfig C,
 	function ConfiguredFunc[C, I, O],
@@ -102,7 +103,7 @@ func Register[C, I, O any](
 		if !ok {
 			return nil, ErrRunningStateMissing
 		}
-		configValue, loadErr := manager.loadConfig(ctx, state.UserID, name, configType, defaultJSON)
+		configValue, loadErr := m.loadConfig(ctx, state.UserID, name, configType, defaultJSON)
 		if loadErr != nil {
 			return nil, loadErr
 		}
@@ -116,25 +117,25 @@ func Register[C, I, O any](
 		return err
 	}
 
-	manager.mu.Lock()
-	defer manager.mu.Unlock()
-	if _, exists := manager.registered[name]; exists {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.registered[name]; exists {
 		return fmt.Errorf("tool %q already registered", name)
 	}
-	if _, exists := manager.builtins[name]; exists {
+	if _, exists := m.builtins[name]; exists {
 		return fmt.Errorf("tool %q already registered as builtin", name)
 	}
-	if _, exists := manager.virtualPermissions[name]; exists {
+	if _, exists := m.virtualPermissions[name]; exists {
 		return fmt.Errorf("tool %q conflicts with a permission-only capability", name)
 	}
-	manager.registered[name] = &registeredTool{
+	m.registered[name] = &registeredTool{
 		tool:          inferred,
 		configType:    configType,
 		defaultConfig: defaultJSON,
 	}
-	manager.order = append(manager.order, name)
-	manager.permissionByTool[name] = name
-	manager.permissionOrder = append(manager.permissionOrder, name)
+	m.order = append(m.order, name)
+	m.permissionByTool[name] = name
+	m.permissionOrder = append(m.permissionOrder, name)
 	return nil
 }
 
@@ -225,16 +226,6 @@ func (m *Manager) Names() []string {
 	return names
 }
 
-// AllNames returns every registered tool name, including builtin tools.
-func (m *Manager) AllNames() []string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	names := make([]string, 0, len(m.order)+len(m.builtinOrder))
-	names = append(names, m.order...)
-	names = append(names, m.builtinOrder...)
-	return names
-}
-
 // PermissionNames returns the independently controllable permission names.
 // Tools sharing a permission are intentionally omitted as separate controls.
 func (m *Manager) PermissionNames() []string {
@@ -264,17 +255,6 @@ func (m *Manager) HasPermission(name string) bool {
 	return ok && permission == name
 }
 
-// Has reports whether a tool with the given name is registered.
-func (m *Manager) Has(name string) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if _, ok := m.registered[name]; ok {
-		return true
-	}
-	_, ok := m.builtins[name]
-	return ok
-}
-
 func (m *Manager) SetConfig(ctx context.Context, userID int64, name string, value []byte) error {
 	m.mu.RLock()
 	registered, ok := m.registered[name]
@@ -286,7 +266,7 @@ func (m *Manager) SetConfig(ctx context.Context, userID int64, name string, valu
 	if err != nil {
 		return err
 	}
-	record := ConfigRecord{UserID: userID, ToolName: name, Config: string(normalized)}
+	record := model.ToolConfig{UserID: userID, ToolName: name, Config: string(normalized)}
 	if err = m.db.WithContext(ctx).Save(&record).Error; err != nil {
 		return err
 	}
@@ -295,7 +275,7 @@ func (m *Manager) SetConfig(ctx context.Context, userID int64, name string, valu
 }
 
 func (m *Manager) ConfigValue(ctx context.Context, userID int64, name, path string) (any, error) {
-	path, err := validateConfigPath(path)
+	path, err := utils.ValidateJSONPath(path, "tool config path", 0)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +291,7 @@ func (m *Manager) ConfigValue(ctx context.Context, userID int64, name, path stri
 }
 
 func (m *Manager) SetConfigValue(ctx context.Context, userID int64, name, path string, value any) (any, error) {
-	path, err := validateConfigPath(path)
+	path, err := utils.ValidateJSONPath(path, "tool config path", 0)
 	if err != nil {
 		return nil, err
 	}
@@ -339,12 +319,12 @@ func (m *Manager) ConfigJSON(ctx context.Context, userID int64, name string) ([]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrToolNotFound, name)
 	}
-	var record ConfigRecord
+	var record model.ToolConfig
 	err := m.db.WithContext(ctx).
 		Where("user_id = ? AND tool_name = ?", userID, name).
 		First(&record).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		record = ConfigRecord{UserID: userID, ToolName: name, Config: string(registered.defaultConfig)}
+		record = model.ToolConfig{UserID: userID, ToolName: name, Config: string(registered.defaultConfig)}
 		if createErr := m.db.WithContext(ctx).Save(&record).Error; createErr != nil {
 			return nil, createErr
 		}
@@ -379,17 +359,6 @@ func (m *Manager) loadConfig(
 		return reflect.Value{}, fmt.Errorf("decode config for %s: %w", name, err)
 	}
 	return value, nil
-}
-
-func validateConfigPath(path string) (string, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "", errors.New("tool config path is required")
-	}
-	if !configPathPattern.MatchString(path) {
-		return "", fmt.Errorf("invalid tool config path %q", path)
-	}
-	return path, nil
 }
 
 func validateAndNormalizeConfig(name string, configType reflect.Type, data []byte) ([]byte, error) {

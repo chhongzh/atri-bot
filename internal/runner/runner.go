@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package runner
 
 import (
@@ -85,44 +88,4 @@ func (r *Runner) Stop() {
 	r.logger.Debug("mcp workers closed")
 	r.bot.Stop()
 	r.logger.Info("telegram bot stopped")
-}
-
-func (r *Runner) DB() *gorm.DB {
-	return r.db
-}
-
-func (r *Runner) Bot() *telebot.Bot {
-	return r.bot
-}
-
-func (r *Runner) AccountManager() *account.Manager {
-	return r.accounts
-}
-
-func (r *Runner) ConfigManager() *configmanager.Manager {
-	return r.configs
-}
-
-func (r *Runner) CharacterManager() *character.Manager {
-	return r.characters
-}
-
-func (r *Runner) ChatManager() *chat.Manager {
-	return r.chats
-}
-
-func (r *Runner) CommandManager() *command.Manager {
-	return r.commands
-}
-
-func (r *Runner) SessionManager() *session.Manager {
-	return r.sessions
-}
-
-func (r *Runner) ToolManager() *tools.Manager {
-	return r.tools
-}
-
-func (r *Runner) MCPManager() *mcpmanager.Manager {
-	return r.mcp
 }

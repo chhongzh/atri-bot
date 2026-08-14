@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package runner
 
 import (
@@ -7,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chhongzh/atri-bot/internal/account"
 	"github.com/chhongzh/atri-bot/internal/chat"
+	"github.com/chhongzh/atri-bot/internal/model"
 	"gopkg.in/telebot.v4"
 )
 
@@ -21,8 +24,8 @@ func (r *Runner) commandAdmins(c telebot.Context, args []string) {
 		r.commandError(c, err)
 		return
 	}
-	role := account.RoleAdmin
-	r.listAccounts(c, context.Background(), account.UserListFilter{Role: &role}, "管理员", page, "/admins")
+	role := model.RoleAdmin
+	r.listAccounts(c, context.Background(), model.UserListFilter{Role: &role}, "管理员", page, "/admins")
 }
 
 func (r *Runner) commandUsers(c telebot.Context, args []string) {
@@ -53,28 +56,31 @@ func (r *Runner) commandActiveUsers(c telebot.Context, args []string) {
 	}
 	start := (page - 1) * activeUserPageSize
 	end := min(start+activeUserPageSize, len(activeUsers))
-	var builder strings.Builder
-	fmt.Fprintf(&builder, "活跃聊天状态（第 %d/%d 页，共 %d 位）：\n", page, pages, len(activeUsers))
-	for _, active := range activeUsers[start:end] {
-		user, err := r.accounts.Get(ctx, active.UserID)
-		if err != nil {
-			r.commandError(c, err)
-			return
+	if err := r.sendListResult(c, func(builder *strings.Builder) error {
+		fmt.Fprintf(builder, "活跃聊天状态（第 %d/%d 页，共 %d 位）：\n", page, pages, len(activeUsers))
+		for _, active := range activeUsers[start:end] {
+			user, err := r.accounts.Get(ctx, active.UserID)
+			if err != nil {
+				return err
+			}
+			characterID := active.CharacterID
+			if characterID == "" {
+				characterID = "未选择"
+			}
+			fmt.Fprintf(
+				builder,
+				"- %s\n  角色：%s；最近活动：%s\n",
+				formatAccountUser(*user),
+				characterID,
+				formatAccountTime(active.LastActiveAt),
+			)
 		}
-		characterID := active.CharacterID
-		if characterID == "" {
-			characterID = "未选择"
-		}
-		fmt.Fprintf(
-			&builder,
-			"- %s\n  角色：%s；最近活动：%s\n",
-			formatAccountUser(*user),
-			characterID,
-			formatAccountTime(active.LastActiveAt),
-		)
+		writePageFooter(builder, page, pages, "/active-users")
+		return nil
+	}); err != nil {
+		r.commandError(c, err)
+		return
 	}
-	writePageFooter(&builder, page, pages, "/active-users")
-	_ = r.sendSystemResultAndDelete(c, strings.TrimSpace(builder.String()))
 }
 
 func (r *Runner) commandUser(c telebot.Context, args []string) {
@@ -135,7 +141,7 @@ func (r *Runner) showAdminStats(c telebot.Context, ctx context.Context) {
 func (r *Runner) listAccounts(
 	c telebot.Context,
 	ctx context.Context,
-	filter account.UserListFilter,
+	filter model.UserListFilter,
 	label string,
 	page int,
 	pageCommand string,
@@ -153,16 +159,17 @@ func (r *Runner) listAccounts(
 		r.commandError(c, err)
 		return
 	}
-	var builder strings.Builder
-	fmt.Fprintf(&builder, "%s（第 %d/%d 页，共 %d 位）：\n", label, page, result.Pages, result.Total)
-	for _, user := range result.Users {
-		fmt.Fprintf(&builder, "- %s\n", formatAccountUser(user))
-	}
-	writePageFooter(&builder, page, result.Pages, pageCommand)
-	_ = r.sendSystemResultAndDelete(c, strings.TrimSpace(builder.String()))
+	_ = r.sendListResult(c, func(builder *strings.Builder) error {
+		fmt.Fprintf(builder, "%s（第 %d/%d 页，共 %d 位）：\n", label, page, result.Pages, result.Total)
+		for _, user := range result.Users {
+			fmt.Fprintf(builder, "- %s\n", formatAccountUser(user))
+		}
+		writePageFooter(builder, page, result.Pages, pageCommand)
+		return nil
+	})
 }
 
-func userListRequest(args []string) (account.UserListFilter, string, int, string, error) {
+func userListRequest(args []string) (model.UserListFilter, string, int, string, error) {
 	const usage = "/users [all|banned] [page]"
 	action := commandAction(args, "all")
 	pageIndex := 1
@@ -172,16 +179,16 @@ func userListRequest(args []string) (account.UserListFilter, string, int, string
 	}
 	page, err := parseOptionalPage(args, pageIndex, usage)
 	if err != nil {
-		return account.UserListFilter{}, "", 0, "", err
+		return model.UserListFilter{}, "", 0, "", err
 	}
 	switch action {
 	case "all":
-		return account.UserListFilter{}, "用户", page, "/users all", nil
+		return model.UserListFilter{}, "用户", page, "/users all", nil
 	case "banned":
 		banned := true
-		return account.UserListFilter{Banned: &banned}, "已封禁用户", page, "/users banned", nil
+		return model.UserListFilter{Banned: &banned}, "已封禁用户", page, "/users banned", nil
 	default:
-		return account.UserListFilter{}, "", 0, "", fmt.Errorf("用法：%s", usage)
+		return model.UserListFilter{}, "", 0, "", fmt.Errorf("用法：%s", usage)
 	}
 }
 
@@ -205,7 +212,7 @@ func writePageFooter(builder *strings.Builder, page, pages int, pageCommand stri
 	}
 }
 
-func formatAccountUser(user account.User) string {
+func formatAccountUser(user model.User) string {
 	username := singleLine(user.Username)
 	displayName := singleLine(user.DisplayName)
 	identity := displayName
@@ -219,7 +226,7 @@ func formatAccountUser(user account.User) string {
 		identity = "未设置名称"
 	}
 	role := "用户"
-	if user.Role == account.RoleAdmin {
+	if user.Role == model.RoleAdmin {
 		role = "管理员"
 	}
 	if user.Banned {

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
+// SPDX-License-Identifier: MIT
+
 package chat
 
 import (
@@ -140,12 +143,6 @@ func (m *Manager) ToolAllowed(ctx context.Context, userID int64, toolName string
 		return false, err
 	}
 	return info.Allowed, nil
-}
-
-// DefaultToolPermission returns the configured default for a tool name.
-func (m *Manager) DefaultToolPermission(toolName string) (bool, bool) {
-	allowed, ok := m.defaultToolPermissions[strings.TrimSpace(toolName)]
-	return allowed, ok
 }
 
 // allowedTools returns the tools visible to a user, honoring permissions.
