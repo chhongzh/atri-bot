@@ -58,8 +58,11 @@ type Manager struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	mu     sync.Mutex
-	states map[int64]*UserState
+	mu                  sync.Mutex
+	states              map[int64]*UserState
+	preparations        map[int64]*Preparation
+	stateForPreparation func(context.Context, int64, telebot.Context) (*UserState, error)
+	stopping            bool
 }
 
 func New(
@@ -95,7 +98,9 @@ func New(
 		ctx:                    managerCtx,
 		cancel:                 cancel,
 		states:                 make(map[int64]*UserState),
+		preparations:           make(map[int64]*Preparation),
 	}
+	manager.stateForPreparation = manager.state
 	mcpManager.SetOnChange(manager.markStateStale)
 	return manager
 }
@@ -143,6 +148,11 @@ func (m *Manager) Chat(ctx context.Context, c telebot.Context, text string) erro
 }
 
 func (m *Manager) Invalidate(userID int64) {
+	m.cancelPreparation(userID)
+	m.invalidateState(userID)
+}
+
+func (m *Manager) invalidateState(userID int64) {
 	m.mu.Lock()
 	state := m.states[userID]
 	m.mu.Unlock()
@@ -159,6 +169,7 @@ func (m *Manager) Invalidate(userID int64) {
 }
 
 func (m *Manager) InvalidateAll() {
+	m.cancelAllPreparations(false)
 	states := m.snapshotStates()
 	for _, state := range states {
 		state.TurnLoop.Stop(
@@ -193,6 +204,7 @@ func (m *Manager) ActiveUsers() []ActiveUser {
 
 func (m *Manager) Shutdown() {
 	m.cancel()
+	m.cancelAllPreparations(true)
 	states := m.snapshotStates()
 	for _, state := range states {
 		state.TurnLoop.Stop(adk.WithImmediate(), adk.WithSkipCheckpoint(), adk.WithStopCause("shutdown"))
@@ -236,9 +248,12 @@ func (m *Manager) state(ctx context.Context, userID int64, c telebot.Context) (*
 			return state, nil
 		}
 		m.mu.Unlock()
-		m.Invalidate(userID)
+		m.invalidateState(userID)
 	} else {
 		m.mu.Unlock()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	state, err := m.newState(ctx, userID, c)
@@ -247,6 +262,11 @@ func (m *Manager) state(ctx context.Context, userID int64, c telebot.Context) (*
 	}
 
 	m.mu.Lock()
+	if err = ctx.Err(); err != nil {
+		m.mu.Unlock()
+		state.closeMCP()
+		return nil, err
+	}
 	if existing := m.states[userID]; existing != nil {
 		m.mu.Unlock()
 		state.TurnLoop.Stop(adk.WithImmediate(), adk.WithSkipCheckpoint())

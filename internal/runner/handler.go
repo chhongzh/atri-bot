@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/chhongzh/atri-bot/internal/command"
+	"github.com/chhongzh/atri-bot/internal/debounce"
 	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
@@ -18,6 +19,7 @@ import (
 
 const (
 	chatActionRefreshInterval = 4 * time.Second
+	chatDebounceInterval      = 5 * time.Second
 	errorResultPrefix         = "发生了错误，请联系机器人管理员处理：\n```\n"
 )
 
@@ -32,15 +34,45 @@ func (r *Runner) handlerForText(c telebot.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+	fields := utils.ExpandTelebotContext(c)
+	userFields := utils.ExpandUserFields(c)
+	preparation := r.chats.Prepare(c)
+	debounceStartedAt := time.Now()
+	r.logger.Debug("chat message waiting for debounce", userFields...)
+	if err := r.debouncer.Wait(ctx, c.Sender().ID); err != nil {
+		switch {
+		case errors.Is(err, debounce.ErrSuperseded):
+			r.logger.Debug("chat message superseded during debounce", userFields...)
+			return nil
+		case errors.Is(err, debounce.ErrClosed):
+			r.logger.Debug("chat message discarded while runner is stopping", userFields...)
+			return nil
+		default:
+			return err
+		}
+	}
+	r.logger.Debug("chat debounce completed",
+		append(userFields, zap.Duration("elapsed", time.Since(debounceStartedAt)))...,
+	)
+	if err := preparation.Wait(ctx); err != nil {
+		return r.handleChatError(c, err, fields)
+	}
 	if err := c.Notify(telebot.Typing); err != nil {
 		return err
 	}
 	go r.maintainChatAction(ctx, c)
 
-	fields := utils.ExpandTelebotContext(c)
 	r.logger.Debug("handling chat message", append(fields, zap.Bool("command", isCommand))...)
 	start := time.Now()
 	err := r.chats.Chat(ctx, c, text)
+	if err = r.handleChatError(c, err, fields); err != nil {
+		return err
+	}
+	r.logger.Debug("chat round completed", append(fields, zap.Duration("elapsed", time.Since(start)))...)
+	return nil
+}
+
+func (r *Runner) handleChatError(c telebot.Context, err error, fields []zap.Field) error {
 	if errors.Is(err, errs.ErrAIConfigIncomplete) {
 		r.logger.Warn("user attempted chat without complete AI config", fields...)
 		if err = c.Send("缺少 AI 配置，请先使用/ai配置你自己的 AI 连接"); err == nil {
@@ -48,10 +80,6 @@ func (r *Runner) handlerForText(c telebot.Context) error {
 		}
 		return err
 	}
-	if err != nil {
-		return err
-	}
-	r.logger.Debug("chat round completed", append(fields, zap.Duration("elapsed", time.Since(start)))...)
 	return err
 }
 
