@@ -85,7 +85,7 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 func BindedRegister(logger *zap.Logger, restyClient *resty.Client) func(manager *toolmanager.Manager) error {
 	logger = logger.Named("hotspot tool")
 	fn := func(manager *toolmanager.Manager) error {
-		return toolmanager.Register(manager, toolName, toolDescription, config{},
+		return manager.Register(toolName, toolDescription, config{},
 			func(ctx context.Context, runningState *toolmanager.RunningState, cfg *config, input *input) (*result, error) {
 				return tool(ctx, runningState, cfg, input, logger, restyClient)
 			})

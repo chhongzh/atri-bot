@@ -21,7 +21,7 @@ func tool(ctx context.Context, cfg *config, input *input) (*result, error) {
 }
 
 func Register(manager *toolmanager.Manager) error {
-	return toolmanager.Register(manager, "tool", "tool desc", config{},
+	return manager.Register("tool", "tool desc", config{},
 		func(ctx context.Context, _ *toolmanager.RunningState, cfg *config, input *input) (*result, error) {
 			return tool(ctx, cfg, input)
 		})

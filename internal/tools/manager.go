@@ -79,8 +79,7 @@ func (m *Manager) RegisterAll(registrars ...Registrar) error {
 	return nil
 }
 
-func Register[C, I, O any](
-	manager *Manager,
+func (m *Manager) Register[C, I, O any](
 	name, description string,
 	defaultConfig C,
 	function ConfiguredFunc[C, I, O],
@@ -100,7 +99,7 @@ func Register[C, I, O any](
 		if !ok {
 			return nil, ErrRunningStateMissing
 		}
-		configValue, loadErr := manager.loadConfig(ctx, state.UserID, name, configType, defaultJSON)
+		configValue, loadErr := m.loadConfig(ctx, state.UserID, name, configType, defaultJSON)
 		if loadErr != nil {
 			return nil, loadErr
 		}
@@ -114,25 +113,25 @@ func Register[C, I, O any](
 		return err
 	}
 
-	manager.mu.Lock()
-	defer manager.mu.Unlock()
-	if _, exists := manager.registered[name]; exists {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.registered[name]; exists {
 		return fmt.Errorf("tool %q already registered", name)
 	}
-	if _, exists := manager.builtins[name]; exists {
+	if _, exists := m.builtins[name]; exists {
 		return fmt.Errorf("tool %q already registered as builtin", name)
 	}
-	if _, exists := manager.virtualPermissions[name]; exists {
+	if _, exists := m.virtualPermissions[name]; exists {
 		return fmt.Errorf("tool %q conflicts with a permission-only capability", name)
 	}
-	manager.registered[name] = &registeredTool{
+	m.registered[name] = &registeredTool{
 		tool:          inferred,
 		configType:    configType,
 		defaultConfig: defaultJSON,
 	}
-	manager.order = append(manager.order, name)
-	manager.permissionByTool[name] = name
-	manager.permissionOrder = append(manager.permissionOrder, name)
+	m.order = append(m.order, name)
+	m.permissionByTool[name] = name
+	m.permissionOrder = append(m.permissionOrder, name)
 	return nil
 }
 

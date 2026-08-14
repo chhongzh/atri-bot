@@ -203,7 +203,7 @@ func trimAddresses(addresses []string) []string {
 
 func BindedRegister(allowPrivateIP bool) func(manager *toolmanager.Manager) error {
 	return func(manager *toolmanager.Manager) error {
-		return toolmanager.Register(manager, toolName, toolDescription, config{},
+		return manager.Register(toolName, toolDescription, config{},
 			func(ctx context.Context, _ *toolmanager.RunningState, cfg *config, input *input) (*result, error) {
 				return mailTool(ctx, cfg, input, allowPrivateIP)
 			})
