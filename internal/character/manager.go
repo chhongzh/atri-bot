@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/chhongzh/atri-bot/internal/utils"
@@ -31,9 +30,6 @@ var providerIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 //go:embed system.j2
 var systemTemplate string
 
-//go:embed user.j2
-var userTemplate string
-
 type Config struct {
 	CWD          string
 	RemoteURL    string
@@ -48,7 +44,6 @@ type Manager struct {
 	mu             sync.RWMutex
 	characters     map[string]*model.Character
 	systemTemplate *prompt.DefaultChatTemplate
-	userTemplate   *prompt.DefaultChatTemplate
 }
 
 func New(db *gorm.DB, logger *zap.Logger, cfg Config) *Manager {
@@ -58,7 +53,6 @@ func New(db *gorm.DB, logger *zap.Logger, cfg Config) *Manager {
 		cfg:            cfg,
 		characters:     make(map[string]*model.Character),
 		systemTemplate: prompt.FromMessages(schema.Jinja2, schema.SystemMessage(systemTemplate)),
-		userTemplate:   prompt.FromMessages(schema.Jinja2, schema.UserMessage(userTemplate)),
 	}
 }
 
@@ -181,13 +175,6 @@ func (m *Manager) RenderSystemPrompt(ctx context.Context, id, username string) (
 		return "", err
 	}
 	return message.Content, nil
-}
-
-func (m *Manager) RenderUserMessage(ctx context.Context, text string, now time.Time) (*schema.Message, error) {
-	return renderTemplate(ctx, m.userTemplate, "user", map[string]any{
-		"Time":        now.Format(time.RFC3339),
-		"UserMessage": text,
-	})
 }
 
 func renderTemplate(ctx context.Context, template *prompt.DefaultChatTemplate, name string, values map[string]any) (*schema.Message, error) {
