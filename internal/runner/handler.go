@@ -20,15 +20,14 @@ import (
 const (
 	chatActionRefreshInterval = 4 * time.Second
 	chatDebounceInterval      = 5 * time.Second
-	errorResultPrefix         = "发生了错误，请联系机器人管理员处理：\n```\n"
+	errorResultFormat         = "发生了错误，请联系机器人管理员处理：\n```\n%s\n```"
 )
 
 func (r *Runner) handlerForText(c telebot.Context) error {
 	text := c.Text()
 	isCommand := command.IsCommandText(text)
 	if isCommand {
-		handled, err := r.commands.Dispatch(c, text)
-		if handled || err != nil {
+		if err := r.commands.Dispatch(c, text); err != nil {
 			return err
 		}
 	}
@@ -124,7 +123,7 @@ func (r *Runner) handlerForError(err error, c telebot.Context) {
 			{Label: "用户名", Value: "@" + c.Sender().Username},
 		},
 		DetailLabel: "错误详情",
-		Detail:      formatErrorDetail(err),
+		Detail:      err.Error(),
 	})
 	if sendErr := r.sendSystemResultAndDeleteOpts(c, formatErrorResult(err), telebot.ModeMarkdownV2); sendErr != nil {
 		r.logger.Warn("failed to send error result to user",
@@ -134,5 +133,5 @@ func (r *Runner) handlerForError(err error, c telebot.Context) {
 }
 
 func formatErrorResult(err error) string {
-	return errorResultPrefix + escapeMarkdownV2Code(formatErrorDetail(err)) + "\n```"
+	return fmt.Sprintf(errorResultFormat, utils.EscapeMarkdownV2Code(err.Error()))
 }

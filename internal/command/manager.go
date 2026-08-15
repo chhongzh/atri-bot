@@ -121,33 +121,33 @@ func Parse(text string) (string, []string, error) {
 	return name, parts[1:], nil
 }
 
-func (m *Manager) Dispatch(c telebot.Context, text string) (bool, error) {
+func (m *Manager) Dispatch(c telebot.Context, text string) error {
 	if !IsCommandText(text) {
-		return false, nil
+		return nil
 	}
 	name, args, err := Parse(text)
 	if err != nil {
-		return true, m.sendResult(c, "命令解析失败："+err.Error())
+		return m.sendResult(c, "命令解析失败："+err.Error())
 	}
 	if name == "" {
-		return true, m.sendResult(c, "命令不能为空，使用 /help 查看可用命令。")
+		return m.sendResult(c, "命令不能为空，使用 /help 查看可用命令。")
 	}
 	registered, ok := m.commands[name]
 	if !ok {
-		return true, m.sendResult(c, "未知命令，使用 /help 查看可用命令。")
+		return m.sendResult(c, "未知命令，使用 /help 查看可用命令。")
 	}
 	if registered.provider.AdminOnly {
 		sender := c.Sender()
 		allowed, authErr := m.authorizer.IsAdmin(context.Background(), sender.ID)
 		if authErr != nil {
-			return true, authErr
+			return authErr
 		}
 		if !allowed {
-			return true, m.sendResult(c, "这个命令需要管理员权限。")
+			return m.sendResult(c, "这个命令需要管理员权限。")
 		}
 	}
 	registered.command.Handler(c, args)
-	return true, nil
+	return nil
 }
 
 func (m *Manager) Help(ctx context.Context, userID int64) (string, error) {
