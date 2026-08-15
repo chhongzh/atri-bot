@@ -5,6 +5,7 @@ package chat
 
 import (
 	"errors"
+	"io"
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
@@ -27,16 +28,44 @@ func consumeMessageVariant(
 	if variant.MessageStream == nil {
 		return nil, errors.New("streaming message variant has no stream")
 	}
+	defer variant.MessageStream.Close()
 
-	stream := schema.StreamReaderWithConvert(variant.MessageStream, func(chunk *schema.Message) (*schema.Message, error) {
-		if chunk == nil {
-			return nil, schema.ErrNoValue
+	var chunks []*schema.Message
+	for {
+		chunk, recvErr := variant.MessageStream.Recv()
+		var handleErr error
+		if chunk != nil {
+			chunks = append(chunks, chunk)
+			handleErr = handleChunk(chunk)
 		}
-		if err := handleChunk(chunk); err != nil {
-			return nil, err
-		}
-		return chunk, nil
-	})
 
-	return schema.ConcatMessageStream(stream)
+		if errors.Is(recvErr, io.EOF) {
+			return concatMessageChunks(chunks, handleErr)
+		}
+		if recvErr != nil {
+			message, concatErr := concatMessageChunks(chunks, nil)
+			if concatErr != nil {
+				return nil, concatErr
+			}
+			return message, recvErr
+		}
+		if handleErr != nil {
+			message, concatErr := concatMessageChunks(chunks, nil)
+			if concatErr != nil {
+				return nil, concatErr
+			}
+			return message, handleErr
+		}
+	}
+}
+
+func concatMessageChunks(chunks []*schema.Message, streamErr error) (*schema.Message, error) {
+	if len(chunks) == 0 {
+		return nil, streamErr
+	}
+	message, err := schema.ConcatMessages(chunks)
+	if err != nil {
+		return nil, err
+	}
+	return message, streamErr
 }

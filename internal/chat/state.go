@@ -23,12 +23,15 @@ type UserState struct {
 	CreatedAt      time.Time
 	LastActiveAt   time.Time
 
-	mu             sync.RWMutex
-	mcpClose       func()
-	queuedMessages []*schema.Message
-	activeMessages []*schema.Message
-	closed         bool
-	stale          bool
+	mu            sync.RWMutex
+	loopMu        sync.Mutex
+	closed        bool
+	preempted     sync.Map
+	roundMu       sync.Mutex
+	activeRoundID uint
+	roundRevision uint64
+	mcpClose      func()
+	stale         bool
 }
 
 // ActiveUser describes an in-memory chat state without exposing credentials.
@@ -76,37 +79,25 @@ func (s *UserState) isStale() bool {
 	return s.stale
 }
 
-func (s *UserState) startTurnMessages() []*schema.Message {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	messages := s.queuedMessages
-	s.queuedMessages = nil
-	s.activeMessages = messages
-	return messages
-}
-
-func (s *UserState) finishTurnMessages() []*schema.Message {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	messages := s.activeMessages
-	s.activeMessages = nil
-	return messages
-}
-
-func (s *UserState) requeueMessages(messages []*schema.Message) {
-	s.mu.Lock()
-	s.queuedMessages = append(messages, s.queuedMessages...)
-	s.mu.Unlock()
-}
-
-// closeMCP marks the state closed and releases MCP connections exactly once.
+// closeMCP releases MCP connections exactly once.
 func (s *UserState) closeMCP() {
 	s.mu.Lock()
 	closer := s.mcpClose
 	s.mcpClose = func() {}
-	s.closed = true
 	s.mu.Unlock()
 	closer()
+}
+
+func (s *UserState) markImmediatePreempt(loop *adk.TurnLoop[*Request, *schema.Message]) {
+	s.preempted.Store(loop, struct{}{})
+}
+
+func (s *UserState) isImmediatePreempt(loop *adk.TurnLoop[*Request, *schema.Message]) bool {
+	_, ok := s.preempted.Load(loop)
+	return ok
+}
+
+func (s *UserState) takeImmediatePreempt(loop *adk.TurnLoop[*Request, *schema.Message]) bool {
+	_, ok := s.preempted.LoadAndDelete(loop)
+	return ok
 }
