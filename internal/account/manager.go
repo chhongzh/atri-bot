@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
+	"github.com/chhongzh/atri-bot/internal/constants"
 	"github.com/chhongzh/atri-bot/internal/model"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -34,10 +35,10 @@ type Manager struct {
 
 func New(db *gorm.DB, logger *zap.Logger, configs *configmanager.Manager, defaultMaxRounds, defaultImageMaxEdge int) *Manager {
 	if defaultMaxRounds <= 0 {
-		defaultMaxRounds = 36
+		defaultMaxRounds = constants.DefaultMaxRounds
 	}
-	if defaultImageMaxEdge <= 0 || defaultImageMaxEdge > configmanager.MaxImageMaxEdge {
-		defaultImageMaxEdge = configmanager.DefaultImageMaxEdge
+	if defaultImageMaxEdge <= 0 || defaultImageMaxEdge > constants.MaxImageMaxEdge {
+		defaultImageMaxEdge = constants.DefaultImageMaxEdge
 	}
 	return &Manager{db: db, logger: logger, configs: configs, defaultMaxRounds: defaultMaxRounds, defaultImageMaxEdge: defaultImageMaxEdge}
 }
@@ -137,8 +138,8 @@ func (m *Manager) SetSettings(ctx context.Context, id int64, settings configmana
 	if settings.AIMaxRounds <= 0 {
 		return errors.New("AI max rounds must be positive")
 	}
-	if settings.AIImageMaxEdge <= 0 || settings.AIImageMaxEdge > configmanager.MaxImageMaxEdge {
-		return fmt.Errorf("AI image max edge must be between 1 and %d", configmanager.MaxImageMaxEdge)
+	if settings.AIImageMaxEdge <= 0 || settings.AIImageMaxEdge > constants.MaxImageMaxEdge {
+		return fmt.Errorf("AI image max edge must be between 1 and %d", constants.MaxImageMaxEdge)
 	}
 	if _, err := m.Get(ctx, id); err != nil {
 		return err

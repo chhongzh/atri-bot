@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chhongzh/atri-bot/internal/constants"
 	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/chhongzh/atri-bot/internal/msgops"
 	"github.com/cloudwego/eino/adk"
@@ -21,8 +22,6 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
-
-const DefaultMaxRounds = 36
 
 const (
 	maxPersistedToolResultRunes = 2_000
@@ -724,7 +723,7 @@ func marshalSessionJSON(v any, what string) (string, error) {
 
 func normalizeMaxRounds(maxRounds int) int {
 	if maxRounds <= 0 {
-		return DefaultMaxRounds
+		return constants.DefaultMaxRounds
 	}
 	return maxRounds
 }

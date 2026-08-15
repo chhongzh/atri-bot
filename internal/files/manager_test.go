@@ -16,11 +16,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chhongzh/atri-bot/internal/constants"
 	"go.uber.org/zap"
 )
 
 func TestSaveLoadAndQuota(t *testing.T) {
-	manager := New(context.Background(), t.TempDir(), 8, DefaultCleanupAfter, zap.NewNop())
+	manager := New(context.Background(), t.TempDir(), 8, constants.DefaultFilesCleanupAge, zap.NewNop())
 	if err := manager.Init(); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +58,7 @@ func TestSaveLoadAndQuota(t *testing.T) {
 }
 
 func TestSaveResizesImageBeforeStorage(t *testing.T) {
-	manager := New(context.Background(), t.TempDir(), DefaultMaxStorageBytes, DefaultCleanupAfter, zap.NewNop())
+	manager := New(context.Background(), t.TempDir(), constants.DefaultFilesStorageBytes, constants.DefaultFilesCleanupAge, zap.NewNop())
 	if err := manager.Init(); err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +124,7 @@ func TestResizeImageOnlyShrinksOversizedImages(t *testing.T) {
 
 func TestCleanupRemovesFilesOlderThanOneWeek(t *testing.T) {
 	root := t.TempDir()
-	manager := New(context.Background(), root, DefaultMaxStorageBytes, DefaultCleanupAfter, zap.NewNop())
+	manager := New(context.Background(), root, constants.DefaultFilesStorageBytes, constants.DefaultFilesCleanupAge, zap.NewNop())
 	if err := manager.Init(); err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +136,7 @@ func TestCleanupRemovesFilesOlderThanOneWeek(t *testing.T) {
 	}
 	_, _, hash, _ := parseRef(ref.ID)
 	path := filepath.Join(root, hash)
-	old := time.Now().Add(-DefaultCleanupAfter - time.Hour)
+	old := time.Now().Add(-constants.DefaultFilesCleanupAge - time.Hour)
 	if err = os.Chtimes(path, old, old); err != nil {
 		t.Fatal(err)
 	}

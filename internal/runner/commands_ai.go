@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	configmanager "github.com/chhongzh/atri-bot/internal/config"
+	"github.com/chhongzh/atri-bot/internal/constants"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
@@ -69,8 +69,8 @@ func (r *Runner) commandAI(c telebot.Context, args []string) {
 		}
 	case "image-size":
 		maxEdge, parseErr := strconv.Atoi(value)
-		if parseErr != nil || maxEdge <= 0 || maxEdge > configmanager.MaxImageMaxEdge {
-			err = fmt.Errorf("image-size 必须是 1 到 %d 之间的整数", configmanager.MaxImageMaxEdge)
+		if parseErr != nil || maxEdge <= 0 || maxEdge > constants.MaxImageMaxEdge {
+			err = fmt.Errorf("image-size 必须是 1 到 %d 之间的整数", constants.MaxImageMaxEdge)
 		} else {
 			err = r.accounts.SetAIImageMaxEdge(ctx, sender.ID, maxEdge)
 		}

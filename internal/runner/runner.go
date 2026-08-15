@@ -21,11 +21,6 @@ import (
 	"gorm.io/gorm"
 )
 
-const (
-	DefaultCharacterRepositoryURL = "https://github.com/mihari-bot/chardef"
-	DefaultCharacterBranch        = "main"
-)
-
 type Config struct {
 	BotToken string
 	CWD      string

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
+	"github.com/chhongzh/atri-bot/internal/constants"
 	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -19,7 +20,7 @@ func TestUserSettingsAreStoredSeparatelyFromAccounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	configs := configmanager.New(db)
-	manager := New(db, zap.NewNop(), configs, 36, configmanager.DefaultImageMaxEdge)
+	manager := New(db, zap.NewNop(), configs, constants.DefaultMaxRounds, constants.DefaultImageMaxEdge)
 	if err = manager.Init(); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +49,7 @@ func TestUserSettingsAreStoredSeparatelyFromAccounts(t *testing.T) {
 	if first.AIModel != "model-one" || first.AIImageMaxEdge != 1536 {
 		t.Fatalf("first user settings = %#v", first)
 	}
-	if second.AIModel != "" || second.AIMaxRounds != 36 || second.AIImageMaxEdge != configmanager.DefaultImageMaxEdge {
+	if second.AIModel != "" || second.AIMaxRounds != constants.DefaultMaxRounds || second.AIImageMaxEdge != constants.DefaultImageMaxEdge {
 		t.Fatalf("second user settings = %#v", second)
 	}
 }

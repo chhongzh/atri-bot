@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/chhongzh/atri-bot/internal/constants"
 	"github.com/chhongzh/atri-bot/internal/runner"
 	"github.com/chhongzh/atri-bot/internal/security"
 	"github.com/chhongzh/atri-bot/internal/tools"
@@ -86,8 +87,8 @@ func getRunner(logger *zap.Logger, restyClient *resty.Client, browser *rod.Brows
 	return runner.New(logger, &runner.Config{
 		BotToken:               cfg.Telegram.BotToken,
 		CWD:                    cfg.CWD,
-		CharacterRepositoryURL: runner.DefaultCharacterRepositoryURL,
-		CharacterBranch:        runner.DefaultCharacterBranch,
+		CharacterRepositoryURL: constants.DefaultCharacterRepositoryURL,
+		CharacterBranch:        constants.DefaultCharacterBranch,
 		DefaultMaxRounds:       cfg.Default.MaxRounds,
 		DefaultImageMaxEdge:    cfg.Default.ImageMaxEdge,
 		DefaultToolPermissions: cfg.Default.ToolPermissions,

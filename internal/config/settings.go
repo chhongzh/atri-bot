@@ -4,10 +4,8 @@
 package config
 
 const (
-	UserSettingsKey     = "settings"
-	RuntimeSettingsKey  = "runtime"
-	DefaultImageMaxEdge = 1024
-	MaxImageMaxEdge     = 2048
+	UserSettingsKey    = "settings"
+	RuntimeSettingsKey = "runtime"
 )
 
 type UserSettings struct {

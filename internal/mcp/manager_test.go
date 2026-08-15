@@ -11,6 +11,7 @@ import (
 
 	"github.com/chhongzh/atri-bot/internal/account"
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
+	"github.com/chhongzh/atri-bot/internal/constants"
 	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
@@ -24,7 +25,7 @@ func newTestManager(t *testing.T, runtime configmanager.RuntimeSettings, allowPr
 		t.Fatal(err)
 	}
 	configs := configmanager.New(db)
-	accounts := account.New(db, zap.NewNop(), configs, 36, configmanager.DefaultImageMaxEdge)
+	accounts := account.New(db, zap.NewNop(), configs, constants.DefaultMaxRounds, constants.DefaultImageMaxEdge)
 	if err = accounts.Init(); err != nil {
 		t.Fatal(err)
 	}

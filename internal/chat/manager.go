@@ -16,6 +16,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/account"
 	"github.com/chhongzh/atri-bot/internal/character"
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
+	"github.com/chhongzh/atri-bot/internal/constants"
 	"github.com/chhongzh/atri-bot/internal/errs"
 	filesmanager "github.com/chhongzh/atri-bot/internal/files"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
@@ -83,10 +84,10 @@ func New(
 	cfg Config,
 ) *Manager {
 	if cfg.StateTTL <= 0 {
-		cfg.StateTTL = 30 * time.Minute
+		cfg.StateTTL = constants.DefaultChatStateTTL
 	}
 	if cfg.ModelTimeout <= 0 {
-		cfg.ModelTimeout = 2 * time.Minute
+		cfg.ModelTimeout = constants.DefaultAIModelTimeout
 	}
 	managerCtx, cancel := context.WithCancel(ctx)
 	manager := &Manager{

@@ -14,6 +14,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/chat"
 	"github.com/chhongzh/atri-bot/internal/command"
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
+	"github.com/chhongzh/atri-bot/internal/constants"
 	filesmanager "github.com/chhongzh/atri-bot/internal/files"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	"github.com/chhongzh/atri-bot/internal/security"
@@ -178,10 +179,10 @@ func (r *Runner) normalizeConfig() error {
 	}
 	r.cfg.CWD = abs
 	if r.cfg.CharacterRepositoryURL == "" {
-		r.cfg.CharacterRepositoryURL = DefaultCharacterRepositoryURL
+		r.cfg.CharacterRepositoryURL = constants.DefaultCharacterRepositoryURL
 	}
 	if r.cfg.CharacterBranch == "" {
-		r.cfg.CharacterBranch = DefaultCharacterBranch
+		r.cfg.CharacterBranch = constants.DefaultCharacterBranch
 	}
 	for _, directory := range []string{"data", "chardefs"} {
 		if err = os.MkdirAll(filepath.Join(r.cfg.CWD, directory), 0o755); err != nil {

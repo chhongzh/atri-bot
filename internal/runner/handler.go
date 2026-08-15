@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/chhongzh/atri-bot/internal/command"
+	"github.com/chhongzh/atri-bot/internal/constants"
 	"github.com/chhongzh/atri-bot/internal/errs"
 	filesmanager "github.com/chhongzh/atri-bot/internal/files"
 	"github.com/chhongzh/atri-bot/internal/utils"
@@ -162,8 +163,8 @@ func (r *Runner) handlerForMedia(c telebot.Context) error {
 		caption = "用户发送了" + map[string]string{"image": "一张图片", "audio": "一段音频", "video": "一段视频"}[kind]
 	}
 	return r.handleChatRequest(c, receivedAt, mediaChatAction(kind), func(ctx context.Context) error {
-		if file.FileSize > filesmanager.MaxBytes {
-			return fmt.Errorf("媒体文件不能超过 %d MB", filesmanager.MaxBytes>>20)
+		if file.FileSize > constants.MaxUploadFileBytes {
+			return fmt.Errorf("媒体文件不能超过 %d MB", constants.MaxUploadFileBytes>>20)
 		}
 		body, fileErr := c.Bot().File(file)
 		if fileErr != nil {

@@ -22,18 +22,15 @@ import (
 	"sync"
 	"time"
 
-	configmanager "github.com/chhongzh/atri-bot/internal/config"
+	"github.com/chhongzh/atri-bot/internal/constants"
 	"go.uber.org/zap"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 )
 
 const (
-	MaxBytes               int64 = 20 << 20
-	DefaultMaxStorageBytes int64 = 1 << 30
-	DefaultCleanupAfter          = 7 * 24 * time.Hour
-	cleanupInterval              = 24 * time.Hour
-	imageQuality                 = 85
+	cleanupInterval = 24 * time.Hour
+	imageQuality    = 85
 )
 
 type Ref struct{ ID string }
@@ -57,10 +54,10 @@ type Manager struct {
 
 func New(ctx context.Context, root string, maxBytes int64, maxAge time.Duration, logger *zap.Logger) *Manager {
 	if maxBytes <= 0 {
-		maxBytes = DefaultMaxStorageBytes
+		maxBytes = constants.DefaultFilesStorageBytes
 	}
 	if maxAge <= 0 {
-		maxAge = DefaultCleanupAfter
+		maxAge = constants.DefaultFilesCleanupAge
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	return &Manager{root: root, maxBytes: maxBytes, maxAge: maxAge, logger: logger, ctx: ctx, cancel: cancel, done: make(chan struct{})}
@@ -87,8 +84,8 @@ func (m *Manager) Save(ctx context.Context, kind, name string, imageMaxEdge int,
 	if err := ctx.Err(); err != nil {
 		return Ref{}, err
 	}
-	if declaredSize > MaxBytes {
-		return Ref{}, fmt.Errorf("媒体文件不能超过 %d MB", MaxBytes>>20)
+	if declaredSize > constants.MaxUploadFileBytes {
+		return Ref{}, fmt.Errorf("媒体文件不能超过 %d MB", constants.MaxUploadFileBytes>>20)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -115,7 +112,7 @@ func (m *Manager) Save(ctx context.Context, kind, name string, imageMaxEdge int,
 			_, copyErr = io.Copy(digest, temporary)
 		}
 	} else {
-		written, copyErr = io.Copy(io.MultiWriter(temporary, digest), io.LimitReader(body, MaxBytes+1))
+		written, copyErr = io.Copy(io.MultiWriter(temporary, digest), io.LimitReader(body, constants.MaxUploadFileBytes+1))
 	}
 	closeErr := temporary.Close()
 	if copyErr != nil {
@@ -124,8 +121,8 @@ func (m *Manager) Save(ctx context.Context, kind, name string, imageMaxEdge int,
 	if closeErr != nil {
 		return Ref{}, closeErr
 	}
-	if written > MaxBytes {
-		return Ref{}, fmt.Errorf("媒体文件不能超过 %d MB", MaxBytes>>20)
+	if written > constants.MaxUploadFileBytes {
+		return Ref{}, fmt.Errorf("媒体文件不能超过 %d MB", constants.MaxUploadFileBytes>>20)
 	}
 	if err = ctx.Err(); err != nil {
 		return Ref{}, err
@@ -161,17 +158,17 @@ func (m *Manager) Save(ctx context.Context, kind, name string, imageMaxEdge int,
 
 func resizeImage(destination io.Writer, source io.Reader, maxEdge int) (int64, error) {
 	if maxEdge <= 0 {
-		maxEdge = configmanager.DefaultImageMaxEdge
+		maxEdge = constants.DefaultImageMaxEdge
 	}
-	if maxEdge > configmanager.MaxImageMaxEdge {
-		return 0, fmt.Errorf("图片最长边不能超过 %d 像素", configmanager.MaxImageMaxEdge)
+	if maxEdge > constants.MaxImageMaxEdge {
+		return 0, fmt.Errorf("图片最长边不能超过 %d 像素", constants.MaxImageMaxEdge)
 	}
-	data, err := io.ReadAll(io.LimitReader(source, MaxBytes+1))
+	data, err := io.ReadAll(io.LimitReader(source, constants.MaxUploadFileBytes+1))
 	if err != nil {
 		return 0, err
 	}
-	if int64(len(data)) > MaxBytes {
-		return 0, fmt.Errorf("媒体文件不能超过 %d MB", MaxBytes>>20)
+	if int64(len(data)) > constants.MaxUploadFileBytes {
+		return 0, fmt.Errorf("媒体文件不能超过 %d MB", constants.MaxUploadFileBytes>>20)
 	}
 	decoded, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
@@ -226,7 +223,7 @@ func (m *Manager) Load(ctx context.Context, refs []string) ([]Attachment, error)
 		if err != nil {
 			return nil, err
 		}
-		if int64(len(data)) > MaxBytes {
+		if int64(len(data)) > constants.MaxUploadFileBytes {
 			continue
 		}
 		attachments = append(attachments, Attachment{
