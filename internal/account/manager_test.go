@@ -19,7 +19,7 @@ func TestUserSettingsAreStoredSeparatelyFromAccounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	configs := configmanager.New(db)
-	manager := New(db, zap.NewNop(), configs, 36)
+	manager := New(db, zap.NewNop(), configs, 36, configmanager.DefaultImageMaxEdge)
 	if err = manager.Init(); err != nil {
 		t.Fatal(err)
 	}
@@ -33,6 +33,9 @@ func TestUserSettingsAreStoredSeparatelyFromAccounts(t *testing.T) {
 	if err = manager.SetAIModel(ctx, 1, "model-one"); err != nil {
 		t.Fatal(err)
 	}
+	if err = manager.SetAIImageMaxEdge(ctx, 1, 1536); err != nil {
+		t.Fatal(err)
+	}
 
 	first, err := manager.Settings(ctx, 1)
 	if err != nil {
@@ -42,10 +45,10 @@ func TestUserSettingsAreStoredSeparatelyFromAccounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.AIModel != "model-one" {
-		t.Fatalf("first user model = %q", first.AIModel)
+	if first.AIModel != "model-one" || first.AIImageMaxEdge != 1536 {
+		t.Fatalf("first user settings = %#v", first)
 	}
-	if second.AIModel != "" || second.AIMaxRounds != 36 {
+	if second.AIModel != "" || second.AIMaxRounds != 36 || second.AIImageMaxEdge != configmanager.DefaultImageMaxEdge {
 		t.Fatalf("second user settings = %#v", second)
 	}
 }

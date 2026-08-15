@@ -83,6 +83,7 @@ telegram:
 # 新用户默认值
 default:
   max_rounds: 36            # 新用户会话轮数上限
+  image_max_edge: 1024      # 新用户图片最长边默认值，最大 2048
   mcp_max_tools: 128        # 每用户 MCP provider 上限
   tool_permissions: { }      # 新用户工具默认权限
 
@@ -99,6 +100,11 @@ database:
 # 外部服务
 external:
   browser_url: ""           # 配置后启用 web_read 工具，例如 127.0.0.1:9222
+
+# 本地媒体缓存
+files:
+  max_storage_mb: 1024      # 全局媒体池空间上限
+  cleanup_after: 7d         # 文件保留时间，支持 1d、3d、24h 等格式
 
 # 数据根目录
 atri_cwd: "."
@@ -118,6 +124,7 @@ atri_cwd: "."
 /ai key <你的 api key>
 /ai model <模型名>
 /ai rounds 36
+/ai image-size 1024
 ```
 
 各项配置的含义如下。
@@ -127,6 +134,7 @@ atri_cwd: "."
   TurnLoop 从收到的一组 user 消息开始，包含其间所有 assistant、tool call 和 tool result，直到最终 assistant
   回复结束，整体计为一轮。达到上限后会先阻塞新一轮，用该用户自己的模型生成带 cutoff 的 system history；原始轮次继续保留，后续加载只读取最新
   system history 与 cutoff 之后的新轮次。
+- `default.image_max_edge` 新用户图片最长边默认值，默认 1024，最大 2048；用户可用 `/ai image-size` 单独修改。
 - `default.mcp_max_tools` 每个用户可添加的 MCP provider 上限，默认 128，管理员可用 `/mcp limit` 单独覆盖。
 - `default.tool_permissions` 新用户的默认工具权限映射。
 - `security.allow_private_ip` 是否允许用户配置的网络出口访问 localhost、内网域名和私网 IP，默认 false。
@@ -134,6 +142,8 @@ atri_cwd: "."
 - `database.path` sqlite 数据库文件路径，相对 `atri_cwd`，默认 `atri-bot.db`。
 - `database.dsn` mysql 连接串，`type: mysql` 时必填。
 - `external.browser_url` 启用网页读取工具 `web_read` 所需的浏览器调试地址，例如 `127.0.0.1:9222`；未配置时不注册该工具。
+- `files.max_storage_mb` 全局本地媒体池上限，默认 1024 MB；媒体按 SHA-256 摘要全局去重，单文件最大 20 MB。
+- `files.cleanup_after` 本地媒体保留时间，默认 `7d`，支持 `1d`、`3d` 及 `time.ParseDuration` 接受的格式。
 - `atri_cwd` 数据和本地角色的根目录，默认当前目录。数据库文件和远程角色缓存都放在这里。
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>

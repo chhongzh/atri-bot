@@ -140,15 +140,11 @@ func (r *Runner) handlerForUnsupportedMedia(telebot.Context) error {
 func (r *Runner) handlerForMedia(c telebot.Context) error {
 	receivedAt := time.Now()
 	settings, err := r.accounts.Settings(context.Background(), c.Sender().ID)
-	if err != nil || !settings.AIFilesEnabled {
+	if err != nil {
 		return err
 	}
 	kind, file, name, caption := telegramMedia(c.Message())
 	if file == nil {
-		return nil
-	}
-	if file.FileSize > filesmanager.MaxBytes {
-		_ = c.Send("媒体文件不能超过 20 MB")
 		return nil
 	}
 	if kind == "" {
@@ -166,18 +162,18 @@ func (r *Runner) handlerForMedia(c telebot.Context) error {
 		caption = "用户发送了" + map[string]string{"image": "一张图片", "audio": "一段音频", "video": "一段视频"}[kind]
 	}
 	return r.handleChatRequest(c, receivedAt, mediaChatAction(kind), func(ctx context.Context) error {
+		if file.FileSize > filesmanager.MaxBytes {
+			return fmt.Errorf("媒体文件不能超过 %d MB", filesmanager.MaxBytes>>20)
+		}
 		body, fileErr := c.Bot().File(file)
 		if fileErr != nil {
-			_ = c.Send("无法从 Telegram 读取媒体")
-			return nil
+			return fmt.Errorf("从 Telegram 读取媒体: %w", fileErr)
 		}
-		ref, uploadErr := r.files.Upload(ctx, settings, c.Sender().ID, characterID, kind, name, body, file.FileSize)
-		if uploadErr != nil {
-			r.logger.Warn("provider file upload failed", append(utils.ExpandTelebotContext(c), zap.Error(uploadErr))...)
-			_ = c.Send("模型端点文件上传失败")
-			return nil
+		ref, saveErr := r.files.Save(ctx, kind, name, settings.AIImageMaxEdge, body, file.FileSize)
+		if saveErr != nil {
+			return fmt.Errorf("保存媒体: %w", saveErr)
 		}
-		return r.chats.ChatFiles(ctx, c, caption, []filesmanager.Ref{ref}, receivedAt)
+		return r.chats.ChatMedia(ctx, c, caption, []filesmanager.Ref{ref}, receivedAt)
 	})
 }
 

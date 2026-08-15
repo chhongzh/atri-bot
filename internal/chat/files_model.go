@@ -2,10 +2,8 @@ package chat
 
 import (
 	"context"
-	"encoding/json"
 
 	filesmanager "github.com/chhongzh/atri-bot/internal/files"
-	openai "github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 )
@@ -13,19 +11,26 @@ import (
 const fileRefsKey = "atri_file_refs"
 
 type filesModel struct {
-	inner       model.ToolCallingChatModel
-	files       *filesmanager.Manager
-	userID      int64
-	characterID string
-	revision    uint64
+	inner model.ToolCallingChatModel
+	files *filesmanager.Manager
 }
 
 func (m *filesModel) Generate(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.Message, error) {
-	return m.inner.Generate(ctx, in, append(opts, openai.WithRequestPayloadModifier(m.modify))...)
+	messages, err := m.load(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return m.inner.Generate(ctx, messages, opts...)
 }
+
 func (m *filesModel) Stream(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
-	return m.inner.Stream(ctx, in, append(opts, openai.WithRequestPayloadModifier(m.modify))...)
+	messages, err := m.load(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return m.inner.Stream(ctx, messages, opts...)
 }
+
 func (m *filesModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
 	inner, err := m.inner.WithTools(tools)
 	if err != nil {
@@ -35,38 +40,41 @@ func (m *filesModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatM
 	copy.inner = inner
 	return &copy, nil
 }
-func (m *filesModel) modify(ctx context.Context, messages []*schema.Message, raw []byte) ([]byte, error) {
-	var payload map[string]any
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		return nil, err
-	}
-	payloadMessages, _ := payload["messages"].([]any)
+
+func (m *filesModel) load(ctx context.Context, messages []*schema.Message) ([]*schema.Message, error) {
+	loaded := append([]*schema.Message(nil), messages...)
 	for index, message := range messages {
 		if message.Role != schema.User || message.Extra == nil {
 			continue
 		}
-		rawRefs := fileRefs(message.Extra[fileRefsKey])
-		if len(rawRefs) == 0 {
-			continue
-		}
-		ids, err := m.files.IDs(ctx, m.userID, m.characterID, m.revision, rawRefs)
+		attachments, err := m.files.Load(ctx, fileRefs(message.Extra[fileRefsKey]))
 		if err != nil {
 			return nil, err
 		}
-		if len(ids) == 0 || index >= len(payloadMessages) {
+		if len(attachments) == 0 {
 			continue
 		}
-		payloadMessage, ok := payloadMessages[index].(map[string]any)
-		if !ok {
-			continue
+		copy := *message
+		copy.Content = ""
+		copy.UserInputMultiContent = []schema.MessageInputPart{{Type: schema.ChatMessagePartTypeText, Text: message.Content}}
+		for _, attachment := range attachments {
+			copy.UserInputMultiContent = append(copy.UserInputMultiContent, inputPart(attachment))
 		}
-		parts := []any{map[string]any{"type": "text", "text": message.Content}}
-		for _, id := range ids {
-			parts = append(parts, map[string]any{"type": "file", "file": map[string]any{"file_id": id}})
-		}
-		payloadMessage["content"] = parts
+		loaded[index] = &copy
 	}
-	return json.Marshal(payload)
+	return loaded, nil
+}
+
+func inputPart(attachment filesmanager.Attachment) schema.MessageInputPart {
+	common := schema.MessagePartCommon{Base64Data: &attachment.Base64, MIMEType: attachment.MIMEType}
+	switch attachment.Kind {
+	case "audio":
+		return schema.MessageInputPart{Type: schema.ChatMessagePartTypeAudioURL, Audio: &schema.MessageInputAudio{MessagePartCommon: common}}
+	case "video":
+		return schema.MessageInputPart{Type: schema.ChatMessagePartTypeVideoURL, Video: &schema.MessageInputVideo{MessagePartCommon: common}}
+	default:
+		return schema.MessageInputPart{Type: schema.ChatMessagePartTypeImageURL, Image: &schema.MessageInputImage{MessagePartCommon: common}}
+	}
 }
 
 func fileRefs(value any) []string {

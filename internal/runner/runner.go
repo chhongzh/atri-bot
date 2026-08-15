@@ -35,12 +35,15 @@ type Config struct {
 
 	StateTTL               time.Duration
 	DefaultMaxRounds       int
+	DefaultImageMaxEdge    int
 	DefaultToolPermissions map[string]bool
 
 	AIModelTimeout time.Duration
 	AllowPrivateIP bool
 
-	MCPDefaultMaxTools int
+	MCPDefaultMaxTools   int
+	FilesMaxStorageBytes int64
+	FilesCleanupAfter    time.Duration
 
 	ToolRegistrars []tools.Registrar
 }
@@ -86,6 +89,8 @@ func (r *Runner) Stop() {
 	r.logger.Debug("system results cleared")
 	r.chats.Shutdown()
 	r.logger.Debug("chat states shut down")
+	r.files.Close()
+	r.logger.Debug("media file cleanup stopped")
 	r.mcp.Close()
 	r.logger.Debug("mcp workers closed")
 	r.bot.Stop()

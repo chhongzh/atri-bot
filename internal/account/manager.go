@@ -23,19 +23,23 @@ var (
 )
 
 type Manager struct {
-	db               *gorm.DB
-	logger           *zap.Logger
-	configs          *configmanager.Manager
-	defaultMaxRounds int
+	db                  *gorm.DB
+	logger              *zap.Logger
+	configs             *configmanager.Manager
+	defaultMaxRounds    int
+	defaultImageMaxEdge int
 
 	createMu sync.Mutex
 }
 
-func New(db *gorm.DB, logger *zap.Logger, configs *configmanager.Manager, defaultMaxRounds int) *Manager {
+func New(db *gorm.DB, logger *zap.Logger, configs *configmanager.Manager, defaultMaxRounds, defaultImageMaxEdge int) *Manager {
 	if defaultMaxRounds <= 0 {
 		defaultMaxRounds = 36
 	}
-	return &Manager{db: db, logger: logger, configs: configs, defaultMaxRounds: defaultMaxRounds}
+	if defaultImageMaxEdge <= 0 || defaultImageMaxEdge > configmanager.MaxImageMaxEdge {
+		defaultImageMaxEdge = configmanager.DefaultImageMaxEdge
+	}
+	return &Manager{db: db, logger: logger, configs: configs, defaultMaxRounds: defaultMaxRounds, defaultImageMaxEdge: defaultImageMaxEdge}
 }
 
 func (m *Manager) Init() error {
@@ -95,7 +99,10 @@ func (m *Manager) EnsureUser(ctx context.Context, id int64, username, displayNam
 	if err != nil {
 		return nil, false, err
 	}
-	if err = m.configs.SetUser(ctx, id, configmanager.UserSettingsKey, configmanager.UserSettings{AIMaxRounds: m.defaultMaxRounds}); err != nil {
+	if err = m.configs.SetUser(ctx, id, configmanager.UserSettingsKey, configmanager.UserSettings{
+		AIMaxRounds:    m.defaultMaxRounds,
+		AIImageMaxEdge: m.defaultImageMaxEdge,
+	}); err != nil {
 		return nil, false, err
 	}
 
@@ -118,7 +125,10 @@ func (m *Manager) Get(ctx context.Context, id int64) (*model.User, error) {
 func (m *Manager) Settings(ctx context.Context, id int64) (configmanager.UserSettings, error) {
 	settings, err := m.configs.QueryUser[configmanager.UserSettings](ctx, id, configmanager.UserSettingsKey)
 	if errors.Is(err, configmanager.ErrNotFound) {
-		return configmanager.UserSettings{AIMaxRounds: m.defaultMaxRounds}, nil
+		return configmanager.UserSettings{AIMaxRounds: m.defaultMaxRounds, AIImageMaxEdge: m.defaultImageMaxEdge}, nil
+	}
+	if settings.AIImageMaxEdge == 0 {
+		settings.AIImageMaxEdge = m.defaultImageMaxEdge
 	}
 	return settings, err
 }
@@ -126,6 +136,9 @@ func (m *Manager) Settings(ctx context.Context, id int64) (configmanager.UserSet
 func (m *Manager) SetSettings(ctx context.Context, id int64, settings configmanager.UserSettings) error {
 	if settings.AIMaxRounds <= 0 {
 		return errors.New("AI max rounds must be positive")
+	}
+	if settings.AIImageMaxEdge <= 0 || settings.AIImageMaxEdge > configmanager.MaxImageMaxEdge {
+		return fmt.Errorf("AI image max edge must be between 1 and %d", configmanager.MaxImageMaxEdge)
 	}
 	if _, err := m.Get(ctx, id); err != nil {
 		return err
@@ -210,24 +223,14 @@ func (m *Manager) SetCharacter(ctx context.Context, id int64, characterID string
 
 func (m *Manager) SetAIBaseURL(ctx context.Context, id int64, value string) error {
 	return m.updateSettings(ctx, id, func(settings *configmanager.UserSettings) {
-		if settings.AIBaseURL != value {
-			settings.AIConfigRevision++
-		}
 		settings.AIBaseURL = value
 	})
 }
 
 func (m *Manager) SetAIAPIKey(ctx context.Context, id int64, value string) error {
 	return m.updateSettings(ctx, id, func(settings *configmanager.UserSettings) {
-		if settings.AIAPIKey != value {
-			settings.AIConfigRevision++
-		}
 		settings.AIAPIKey = value
 	})
-}
-
-func (m *Manager) SetAIFilesEnabled(ctx context.Context, id int64, value bool) error {
-	return m.updateSettings(ctx, id, func(settings *configmanager.UserSettings) { settings.AIFilesEnabled = value })
 }
 
 func (m *Manager) SetAIModel(ctx context.Context, id int64, value string) error {
@@ -239,6 +242,12 @@ func (m *Manager) SetAIModel(ctx context.Context, id int64, value string) error 
 func (m *Manager) SetAIMaxRounds(ctx context.Context, id int64, value int) error {
 	return m.updateSettings(ctx, id, func(settings *configmanager.UserSettings) {
 		settings.AIMaxRounds = value
+	})
+}
+
+func (m *Manager) SetAIImageMaxEdge(ctx context.Context, id int64, value int) error {
+	return m.updateSettings(ctx, id, func(settings *configmanager.UserSettings) {
+		settings.AIImageMaxEdge = value
 	})
 }
 

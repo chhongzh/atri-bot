@@ -89,8 +89,11 @@ func getRunner(logger *zap.Logger, restyClient *resty.Client, browser *rod.Brows
 		CharacterRepositoryURL: runner.DefaultCharacterRepositoryURL,
 		CharacterBranch:        runner.DefaultCharacterBranch,
 		DefaultMaxRounds:       cfg.Default.MaxRounds,
+		DefaultImageMaxEdge:    cfg.Default.ImageMaxEdge,
 		DefaultToolPermissions: cfg.Default.ToolPermissions,
 		MCPDefaultMaxTools:     cfg.Default.MCPMaxTools,
+		FilesMaxStorageBytes:   int64(cfg.Files.MaxStorageMB) << 20,
+		FilesCleanupAfter:      cfg.Files.cleanupAfter,
 		AllowPrivateIP:         cfg.Security.AllowPrivateIP,
 		ToolRegistrars:         registrars,
 	}, db)

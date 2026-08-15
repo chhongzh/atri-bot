@@ -126,7 +126,7 @@ func (m *Manager) Chat(ctx context.Context, c telebot.Context, text string, rece
 	return m.chat(ctx, c, text, nil, receivedAt)
 }
 
-func (m *Manager) ChatFiles(ctx context.Context, c telebot.Context, text string, refs []filesmanager.Ref, receivedAt time.Time) error {
+func (m *Manager) ChatMedia(ctx context.Context, c telebot.Context, text string, refs []filesmanager.Ref, receivedAt time.Time) error {
 	ids := make([]string, len(refs))
 	for index, ref := range refs {
 		ids[index] = ref.ID
@@ -514,10 +514,7 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 	if err != nil {
 		return nil, err
 	}
-	var modelForAgent model.ToolCallingChatModel = chatModel
-	if settings.AIFilesEnabled {
-		modelForAgent = &filesModel{inner: chatModel, files: m.files, userID: userID, characterID: characterID, revision: settings.AIConfigRevision}
-	}
+	modelForAgent := model.ToolCallingChatModel(&filesModel{inner: chatModel, files: m.files})
 	mcpResult, err := m.mcp.Load(ctx, userID, func(ctx context.Context) (bool, error) {
 		return m.ToolAllowed(ctx, userID, "mcp")
 	})

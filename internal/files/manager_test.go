@@ -1,70 +1,152 @@
 package files
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/jpeg"
+	"image/png"
 	"io"
-	"net/http"
-	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/chhongzh/atri-bot/internal/config"
-	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
-func TestUploadStoresOpaqueReference(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/files" || request.Header.Get("Authorization") != "Bearer key" {
-			t.Fatalf("unexpected upload request: %s %q", request.URL.Path, request.Header.Get("Authorization"))
-		}
-		if err := request.ParseMultipartForm(1 << 20); err != nil {
+func TestSaveLoadAndQuota(t *testing.T) {
+	manager := New(context.Background(), t.TempDir(), 8, DefaultCleanupAfter, zap.NewNop())
+	if err := manager.Init(); err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+
+	ref, err := manager.Save(context.Background(), "video", "video.mp4", 1024, io.NopCloser(strings.NewReader("video")), 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attachments, err := manager.Load(context.Background(), []string{ref.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(attachments) != 1 || attachments[0].Kind != "video" || attachments[0].Base64 != base64.StdEncoding.EncodeToString([]byte("video")) {
+		t.Fatalf("unexpected attachments %#v", attachments)
+	}
+	duplicate, err := manager.Save(context.Background(), "video", "copy.mp4", 1024, io.NopCloser(strings.NewReader("video")), 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if duplicate.ID != ref.ID {
+		t.Fatalf("duplicate content returned different refs: %q != %q", duplicate.ID, ref.ID)
+	}
+	if _, err = manager.Save(context.Background(), "video", "other.mp4", 1024, io.NopCloser(strings.NewReader("other")), 5); err == nil {
+		t.Fatal("expected global pool quota error")
+	}
+	used, err := directorySize(manager.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if used != 5 {
+		t.Fatalf("duplicate content occupied extra space: %d", used)
+	}
+}
+
+func TestSaveResizesImageBeforeStorage(t *testing.T) {
+	manager := New(context.Background(), t.TempDir(), DefaultMaxStorageBytes, DefaultCleanupAfter, zap.NewNop())
+	if err := manager.Init(); err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+
+	source := image.NewRGBA(image.Rect(0, 0, 2000, 1000))
+	draw.Draw(source, source.Bounds(), &image.Uniform{C: color.RGBA{R: 200, G: 100, B: 50, A: 255}}, image.Point{}, draw.Src)
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, source); err != nil {
+		t.Fatal(err)
+	}
+	ref, err := manager.Save(context.Background(), "image", "photo.png", 1024, io.NopCloser(bytes.NewReader(encoded.Bytes())), int64(encoded.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	attachments, err := manager.Load(context.Background(), []string{ref.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(attachments) != 1 || attachments[0].MIMEType != "image/jpeg" {
+		t.Fatalf("unexpected attachments %#v", attachments)
+	}
+	data, err := base64.StdEncoding.DecodeString(attachments[0].Base64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration, err := jpeg.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configuration.Width != 1024 || configuration.Height != 512 {
+		t.Fatalf("resized image dimensions = %dx%d", configuration.Width, configuration.Height)
+	}
+}
+
+func TestResizeImageOnlyShrinksOversizedImages(t *testing.T) {
+	for _, test := range []struct {
+		input image.Point
+		want  image.Point
+	}{
+		{input: image.Pt(2000, 1000), want: image.Pt(1024, 512)},
+		{input: image.Pt(400, 200), want: image.Pt(400, 200)},
+	} {
+		source := image.NewRGBA(image.Rectangle{Max: test.input})
+		draw.Draw(source, source.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
+		var input bytes.Buffer
+		if err := png.Encode(&input, source); err != nil {
 			t.Fatal(err)
 		}
-		if request.FormValue("purpose") != "user_data" {
-			t.Fatalf("unexpected purpose %q", request.FormValue("purpose"))
+		var output bytes.Buffer
+		if _, err := resizeImage(&output, &input, 1024); err != nil {
+			t.Fatal(err)
 		}
-		file, header, err := request.FormFile("file")
+		configuration, err := jpeg.DecodeConfig(bytes.NewReader(output.Bytes()))
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer file.Close()
-		body, err := io.ReadAll(file)
-		if err != nil {
-			t.Fatal(err)
+		if configuration.Width != test.want.X || configuration.Height != test.want.Y {
+			t.Fatalf("input %dx%d resized to %dx%d", test.input.X, test.input.Y, configuration.Width, configuration.Height)
 		}
-		if header.Filename != "photo.jpg" || string(body) != "image" {
-			t.Fatalf("unexpected file %q %q", header.Filename, body)
-		}
-		_, _ = writer.Write([]byte(`{"id":"provider-file"}`))
-	}))
-	defer server.Close()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	}
+}
+
+func TestCleanupRemovesFilesOlderThanOneWeek(t *testing.T) {
+	root := t.TempDir()
+	manager := New(context.Background(), root, DefaultMaxStorageBytes, DefaultCleanupAfter, zap.NewNop())
+	if err := manager.Init(); err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+
+	ref, err := manager.Save(context.Background(), "video", "video.mp4", 1024, io.NopCloser(strings.NewReader("video")), 5)
 	if err != nil {
 		t.Fatal(err)
 	}
-	manager := New(db, zap.NewNop(), server.Client())
-	if err = manager.Init(); err != nil {
+	_, _, hash, _ := parseRef(ref.ID)
+	path := filepath.Join(root, hash)
+	old := time.Now().Add(-DefaultCleanupAfter - time.Hour)
+	if err = os.Chtimes(path, old, old); err != nil {
 		t.Fatal(err)
 	}
-	settings := config.UserSettings{AIBaseURL: server.URL, AIAPIKey: "key", AIConfigRevision: 2}
-	ref, err := manager.Upload(context.Background(), settings, 1, "character", "image", "photo.jpg", io.NopCloser(strings.NewReader("image")), 5)
+	if err = manager.cleanup(); err != nil {
+		t.Fatal(err)
+	}
+	attachments, err := manager.Load(context.Background(), []string{ref.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ids, err := manager.IDs(context.Background(), 1, "character", 2, []string{ref.ID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(ids) != 1 || ids[0] != "provider-file" {
-		t.Fatalf("unexpected ids %#v", ids)
-	}
-	ids, err = manager.IDs(context.Background(), 2, "character", 2, []string{ref.ID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(ids) != 0 {
-		t.Fatalf("cross-user reference leaked: %#v", ids)
+	if len(attachments) != 0 {
+		t.Fatalf("expired attachment was not removed: %#v", attachments)
 	}
 }

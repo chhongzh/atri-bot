@@ -38,7 +38,7 @@ func (r *Runner) Init(ctx context.Context) error {
 	)
 
 	r.configs = configmanager.New(r.db)
-	r.accounts = account.New(r.db, r.logger, r.configs, r.cfg.DefaultMaxRounds)
+	r.accounts = account.New(r.db, r.logger, r.configs, r.cfg.DefaultMaxRounds, r.cfg.DefaultImageMaxEdge)
 	if err := r.accounts.Init(); err != nil {
 		r.logger.Error("failed to initialize account manager", zap.Error(err))
 		return err
@@ -46,6 +46,7 @@ func (r *Runner) Init(ctx context.Context) error {
 	r.logger.Debug("account manager initialized")
 	if err := r.configs.Set(ctx, configmanager.RuntimeSettingsKey, configmanager.RuntimeSettings{
 		DefaultMaxRounds:       r.cfg.DefaultMaxRounds,
+		DefaultImageMaxEdge:    r.cfg.DefaultImageMaxEdge,
 		DefaultToolPermissions: r.cfg.DefaultToolPermissions,
 		MCPDefaultMaxTools:     r.cfg.MCPDefaultMaxTools,
 	}); err != nil {
@@ -64,7 +65,7 @@ func (r *Runner) Init(ctx context.Context) error {
 		return err
 	}
 	r.logger.Debug("session manager initialized")
-	r.files = filesmanager.New(r.db, r.logger, &http.Client{Transport: security.DefaultSafeHTTPTransport(r.cfg.AllowPrivateIP), Timeout: r.cfg.AIModelTimeout})
+	r.files = filesmanager.New(context.WithoutCancel(ctx), filepath.Join(r.cfg.CWD, "data", "files"), r.cfg.FilesMaxStorageBytes, r.cfg.FilesCleanupAfter, r.logger)
 	if err := r.files.Init(); err != nil {
 		return err
 	}
