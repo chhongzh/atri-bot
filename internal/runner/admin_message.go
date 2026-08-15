@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/cloudwego/eino/components/prompt"
 	"github.com/cloudwego/eino/schema"
 	"go.uber.org/zap"
@@ -61,17 +62,17 @@ func renderAdminMessage(ctx context.Context, message adminMessage) (string, erro
 	fields := make([]adminMessageField, len(message.Fields))
 	for index, field := range message.Fields {
 		fields[index] = adminMessageField{
-			Label: escapeMarkdownV2Text(field.Label),
-			Value: escapeMarkdownV2Code(field.Value),
+			Label: utils.EscapeMarkdownV2Text(field.Label),
+			Value: utils.EscapeMarkdownV2Code(field.Value),
 		}
 	}
 	values := map[string]any{
 		"Message": adminMessage{
-			Title:       escapeMarkdownV2Text(message.Title),
-			Category:    escapeMarkdownV2Text(message.Category),
+			Title:       utils.EscapeMarkdownV2Text(message.Title),
+			Category:    utils.EscapeMarkdownV2Text(message.Category),
 			Fields:      fields,
-			DetailLabel: escapeMarkdownV2Text(message.DetailLabel),
-			Detail:      escapeMarkdownV2Code(message.Detail),
+			DetailLabel: utils.EscapeMarkdownV2Text(message.DetailLabel),
+			Detail:      utils.EscapeMarkdownV2Code(message.Detail),
 		},
 	}
 	messages, err := adminMessagePrompt.Format(ctx, values)
@@ -82,38 +83,4 @@ func renderAdminMessage(ctx context.Context, message adminMessage) (string, erro
 		return "", fmt.Errorf("administrator notification template returned %d messages", len(messages))
 	}
 	return strings.TrimSpace(messages[0].Content), nil
-}
-
-func formatErrorDetail(err error) string {
-	return err.Error()
-}
-
-func escapeMarkdownV2Code(value string) string {
-	value = strings.ReplaceAll(value, "\\", "\\\\")
-	return strings.ReplaceAll(value, "`", "\\`")
-}
-
-func escapeMarkdownV2Text(value string) string {
-	replacer := strings.NewReplacer(
-		"\\", "\\\\",
-		"_", "\\_",
-		"*", "\\*",
-		"[", "\\[",
-		"]", "\\]",
-		"(", "\\(",
-		")", "\\)",
-		"~", "\\~",
-		"`", "\\`",
-		">", "\\>",
-		"#", "\\#",
-		"+", "\\+",
-		"-", "\\-",
-		"=", "\\=",
-		"|", "\\|",
-		"{", "\\{",
-		"}", "\\}",
-		".", "\\.",
-		"!", "\\!",
-	)
-	return replacer.Replace(value)
 }

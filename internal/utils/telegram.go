@@ -55,3 +55,33 @@ func splitTelegramTextBlock(text string, limit int) []string {
 func FormatTelegramUsername(user *telebot.User) string {
 	return strings.TrimSpace(strings.Join([]string{user.FirstName, user.LastName}, " "))
 }
+
+func EscapeMarkdownV2Code(value string) string {
+	value = strings.ReplaceAll(value, "\\", "\\\\")
+	return strings.ReplaceAll(value, "`", "\\`")
+}
+
+func EscapeMarkdownV2Text(value string) string {
+	replacer := strings.NewReplacer(
+		"\\", "\\\\",
+		"_", "\\_",
+		"*", "\\*",
+		"[", "\\[",
+		"]", "\\]",
+		"(", "\\(",
+		")", "\\)",
+		"~", "\\~",
+		"`", "\\`",
+		">", "\\>",
+		"#", "\\#",
+		"+", "\\+",
+		"-", "\\-",
+		"=", "\\=",
+		"|", "\\|",
+		"{", "\\{",
+		"}", "\\}",
+		".", "\\.",
+		"!", "\\!",
+	)
+	return replacer.Replace(value)
+}
