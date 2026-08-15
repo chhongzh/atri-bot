@@ -18,7 +18,7 @@ import (
 
 const (
 	toolName        = "web_read"
-	toolDescription = `Read and extract the main textual content from a web page so it can be summarized or analyzed.`
+	toolDescription = `读取并提取网页的主要文字内容，以便总结或分析。`
 )
 
 //go:embed inject.js

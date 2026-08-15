@@ -17,7 +17,7 @@ import (
 
 const (
 	toolName        = "get_hotspot"
-	toolDescription = `Retrieve the current trending topics from Baidu's public hot-search board. Returns each topic's title and source URL; present the URLs only when the user explicitly requests them.`
+	toolDescription = `获取百度热搜榜当前的热门话题。返回每个话题的标题与来源 URL；只有用户明确要求时才展示 URL。`
 )
 
 type config struct {

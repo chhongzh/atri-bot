@@ -21,7 +21,7 @@ import (
 
 const (
 	toolName        = "send_mail"
-	toolDescription = `Send an email over SMTP using the configured sender address. Supports an HTML body, one or more primary recipients, and optional CC recipients.`
+	toolDescription = `通过 SMTP 使用配置的发件地址发送邮件。支持 HTML 正文、一个或多个主要收件人，以及可选的抄送。`
 )
 
 type config struct {
