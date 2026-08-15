@@ -7,12 +7,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudwego/eino/schema"
 	"gopkg.in/telebot.v4"
 )
 
 type Request struct {
 	Context   telebot.Context
 	Text      string
+	FileRefs  []string
 	RoundID   uint
 	Revision  uint64
 	MessageID int
@@ -23,6 +25,14 @@ type Request struct {
 
 	done chan error
 	once sync.Once
+}
+
+func (r *Request) message() *schema.Message {
+	message := schema.UserMessage(r.Text)
+	if len(r.FileRefs) > 0 {
+		message.Extra = map[string]any{fileRefsKey: r.FileRefs}
+	}
+	return message
 }
 
 func newRequest(c telebot.Context, text string, receivedAt time.Time) *Request {

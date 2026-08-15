@@ -18,7 +18,7 @@ func (r *Runner) registerAICommands() error {
 	if err := r.commands.RegisterProvider("ai", "AI 配置", false); err != nil {
 		return err
 	}
-	return r.commands.Register("ai", "查看或修改模型连接配置", "ai", "/ai [show|base-url|key|model|rounds] [value]", r.commandAI)
+	return r.commands.Register("ai", "查看或修改模型连接配置", "ai", "/ai [show|base-url|key|model|rounds|files] [value]", r.commandAI)
 }
 
 func (r *Runner) commandAI(c telebot.Context, args []string) {
@@ -33,20 +33,21 @@ func (r *Runner) commandAI(c telebot.Context, args []string) {
 			return
 		}
 		_ = r.sendSystemResultAndDelete(c, fmt.Sprintf(
-			"Base URL: %s\nModel: %s\nAPI Key: %s\nMax Rounds: %d",
+			"Base URL: %s\nModel: %s\nAPI Key: %s\nMax Rounds: %d\nFiles API: %s",
 			showAIValue(settings.AIBaseURL),
 			showAIValue(settings.AIModel),
 			maskSecret(settings.AIAPIKey),
 			settings.AIMaxRounds,
+			map[bool]string{true: "已启用", false: "未启用"}[settings.AIFilesEnabled],
 		))
 		return
-	case "base-url", "key", "model", "rounds":
+	case "base-url", "key", "model", "rounds", "files":
 	default:
 		r.commandError(c, fmt.Errorf("未知 AI 配置项 %q", action))
 		return
 	}
 
-	value, err := requiredValue(args, 1, "/ai [base-url|key|model|rounds] <value>")
+	value, err := requiredValue(args, 1, "/ai [base-url|key|model|rounds|files] <value>")
 	if err != nil {
 		r.commandError(c, err)
 		return
@@ -64,6 +65,12 @@ func (r *Runner) commandAI(c telebot.Context, args []string) {
 			err = fmt.Errorf("rounds 必须是正整数")
 		} else {
 			err = r.accounts.SetAIMaxRounds(ctx, sender.ID, rounds)
+		}
+	case "files":
+		if value != "on" && value != "off" {
+			err = fmt.Errorf("files 只能是 on 或 off")
+		} else {
+			err = r.accounts.SetAIFilesEnabled(ctx, sender.ID, value == "on")
 		}
 	}
 	if err != nil {

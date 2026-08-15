@@ -14,6 +14,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/chat"
 	"github.com/chhongzh/atri-bot/internal/command"
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
+	filesmanager "github.com/chhongzh/atri-bot/internal/files"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	"github.com/chhongzh/atri-bot/internal/security"
 	"github.com/chhongzh/atri-bot/internal/session"
@@ -63,6 +64,10 @@ func (r *Runner) Init(ctx context.Context) error {
 		return err
 	}
 	r.logger.Debug("session manager initialized")
+	r.files = filesmanager.New(r.db, r.logger, &http.Client{Transport: security.DefaultSafeHTTPTransport(r.cfg.AllowPrivateIP), Timeout: r.cfg.AIModelTimeout})
+	if err := r.files.Init(); err != nil {
+		return err
+	}
 	r.tools = tools.New(r.db, r.logger)
 	if err := r.tools.RegisterAll(r.cfg.ToolRegistrars...); err != nil {
 		r.logger.Error("failed to register tools", zap.Error(err))
@@ -95,7 +100,7 @@ func (r *Runner) Init(ctx context.Context) error {
 		return err
 	}
 	r.logger.Debug("character manager initialized")
-	r.chats = chat.New(context.WithoutCancel(ctx), r.logger, r.db, r.accounts, r.configs, r.characters, r.sessions, r.tools, r.mcp, chat.Config{
+	r.chats = chat.New(context.WithoutCancel(ctx), r.logger, r.db, r.accounts, r.configs, r.characters, r.sessions, r.tools, r.mcp, r.files, chat.Config{
 		StateTTL:          r.cfg.StateTTL,
 		ModelTimeout:      r.cfg.AIModelTimeout,
 		AllowPrivateIP:    r.cfg.AllowPrivateIP,
@@ -120,8 +125,14 @@ func (r *Runner) Init(ctx context.Context) error {
 
 	r.bot.Use(r.middlewareForSender, r.middlewareForLogging, r.middlewareForSystemResultCleanup, r.accounts.UserMiddleware)
 	r.bot.Handle(telebot.OnText, r.handlerForText)
+	r.bot.Handle(telebot.OnPhoto, r.handlerForMedia)
+	r.bot.Handle(telebot.OnVoice, r.handlerForMedia)
+	r.bot.Handle(telebot.OnAudio, r.handlerForMedia)
+	r.bot.Handle(telebot.OnVideo, r.handlerForMedia)
+	r.bot.Handle(telebot.OnAnimation, r.handlerForMedia)
+	r.bot.Handle(telebot.OnVideoNote, r.handlerForMedia)
+	r.bot.Handle(telebot.OnDocument, r.handlerForMedia)
 	for _, endpoint := range []string{
-		telebot.OnMedia,
 		telebot.OnContact,
 		telebot.OnLocation,
 		telebot.OnVenue,

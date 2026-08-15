@@ -210,14 +210,24 @@ func (m *Manager) SetCharacter(ctx context.Context, id int64, characterID string
 
 func (m *Manager) SetAIBaseURL(ctx context.Context, id int64, value string) error {
 	return m.updateSettings(ctx, id, func(settings *configmanager.UserSettings) {
+		if settings.AIBaseURL != value {
+			settings.AIConfigRevision++
+		}
 		settings.AIBaseURL = value
 	})
 }
 
 func (m *Manager) SetAIAPIKey(ctx context.Context, id int64, value string) error {
 	return m.updateSettings(ctx, id, func(settings *configmanager.UserSettings) {
+		if settings.AIAPIKey != value {
+			settings.AIConfigRevision++
+		}
 		settings.AIAPIKey = value
 	})
+}
+
+func (m *Manager) SetAIFilesEnabled(ctx context.Context, id int64, value bool) error {
+	return m.updateSettings(ctx, id, func(settings *configmanager.UserSettings) { settings.AIFilesEnabled = value })
 }
 
 func (m *Manager) SetAIModel(ctx context.Context, id int64, value string) error {

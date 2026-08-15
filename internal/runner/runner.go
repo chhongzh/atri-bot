@@ -12,6 +12,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/chat"
 	"github.com/chhongzh/atri-bot/internal/command"
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
+	filesmanager "github.com/chhongzh/atri-bot/internal/files"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	"github.com/chhongzh/atri-bot/internal/session"
 	"github.com/chhongzh/atri-bot/internal/tools"
@@ -58,6 +59,7 @@ type Runner struct {
 	sessions   *session.Manager
 	tools      *tools.Manager
 	mcp        *mcpmanager.Manager
+	files      *filesmanager.Manager
 
 	systemResultMu      sync.Mutex
 	systemResultDeletes map[int64]func()

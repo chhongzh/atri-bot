@@ -9,12 +9,14 @@ const (
 )
 
 type UserSettings struct {
-	CharacterID string `json:"character_id"`
-	AIBaseURL   string `json:"ai_base_url"`
-	AIAPIKey    string `json:"ai_api_key"`
-	AIModel     string `json:"ai_model"`
-	AIMaxRounds int    `json:"ai_max_rounds"`
-	MCPMaxTools int    `json:"mcp_max_tools"`
+	CharacterID      string `json:"character_id"`
+	AIBaseURL        string `json:"ai_base_url"`
+	AIAPIKey         string `json:"ai_api_key"`
+	AIModel          string `json:"ai_model"`
+	AIMaxRounds      int    `json:"ai_max_rounds"`
+	AIFilesEnabled   bool   `json:"ai_files_enabled"`
+	AIConfigRevision uint64 `json:"ai_config_revision"`
+	MCPMaxTools      int    `json:"mcp_max_tools"`
 }
 
 type RuntimeSettings struct {

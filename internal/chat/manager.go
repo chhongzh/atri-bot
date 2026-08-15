@@ -17,6 +17,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/character"
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
 	"github.com/chhongzh/atri-bot/internal/errs"
+	filesmanager "github.com/chhongzh/atri-bot/internal/files"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	"github.com/chhongzh/atri-bot/internal/msgops"
 	"github.com/chhongzh/atri-bot/internal/security"
@@ -53,6 +54,7 @@ type Manager struct {
 	sessions   *session.Manager
 	tools      *toolmanager.Manager
 	mcp        *mcpmanager.Manager
+	files      *filesmanager.Manager
 	cfg        Config
 
 	defaultToolPermissions map[string]bool
@@ -77,6 +79,7 @@ func New(
 	sessions *session.Manager,
 	tools *toolmanager.Manager,
 	mcpManager *mcpmanager.Manager,
+	files *filesmanager.Manager,
 	cfg Config,
 ) *Manager {
 	if cfg.StateTTL <= 0 {
@@ -95,6 +98,7 @@ func New(
 		sessions:               sessions,
 		tools:                  tools,
 		mcp:                    mcpManager,
+		files:                  files,
 		cfg:                    cfg,
 		defaultToolPermissions: make(map[string]bool),
 		ctx:                    managerCtx,
@@ -119,8 +123,21 @@ func (m *Manager) markStateStale(userID int64) {
 }
 
 func (m *Manager) Chat(ctx context.Context, c telebot.Context, text string, receivedAt time.Time) error {
+	return m.chat(ctx, c, text, nil, receivedAt)
+}
+
+func (m *Manager) ChatFiles(ctx context.Context, c telebot.Context, text string, refs []filesmanager.Ref, receivedAt time.Time) error {
+	ids := make([]string, len(refs))
+	for index, ref := range refs {
+		ids[index] = ref.ID
+	}
+	return m.chat(ctx, c, text, ids, receivedAt)
+}
+
+func (m *Manager) chat(ctx context.Context, c telebot.Context, text string, fileRefs []string, receivedAt time.Time) error {
 	sender := c.Sender()
 	request := newRequest(c, text, receivedAt)
+	request.FileRefs = fileRefs
 	for attempt := 0; attempt < 2; attempt++ {
 		stateStartedAt := time.Now()
 		state, err := m.state(ctx, sender.ID, c)
@@ -242,7 +259,7 @@ func (m *Manager) prepareUserRequest(ctx context.Context, state *UserState, requ
 		return false, nil
 	}
 	if state.activeRoundID == 0 {
-		roundID, err := m.sessions.StartRound(ctx, state.UserID, state.CharacterID, schema.UserMessage(request.Text))
+		roundID, err := m.sessions.StartRound(ctx, state.UserID, state.CharacterID, request.message())
 		if err != nil {
 			return false, err
 		}
@@ -264,7 +281,7 @@ func (m *Manager) appendPreparedUserRequest(ctx context.Context, state *UserStat
 	if state.activeRoundID != request.RoundID || state.roundRevision != request.Revision {
 		return fmt.Errorf("chat round changed while appending interrupted user message")
 	}
-	return m.sessions.AppendUser(ctx, state.UserID, state.CharacterID, request.RoundID, schema.UserMessage(request.Text))
+	return m.sessions.AppendUser(ctx, state.UserID, state.CharacterID, request.RoundID, request.message())
 }
 
 func (m *Manager) Invalidate(userID int64) {
@@ -497,6 +514,10 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 	if err != nil {
 		return nil, err
 	}
+	var modelForAgent model.ToolCallingChatModel = chatModel
+	if settings.AIFilesEnabled {
+		modelForAgent = &filesModel{inner: chatModel, files: m.files, userID: userID, characterID: characterID, revision: settings.AIConfigRevision}
+	}
 	mcpResult, err := m.mcp.Load(ctx, userID, func(ctx context.Context) (bool, error) {
 		return m.ToolAllowed(ctx, userID, "mcp")
 	})
@@ -524,7 +545,7 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 		CreatedAt:      time.Now(),
 		LastActiveAt:   time.Now(),
 	}
-	agent, err := m.buildAgent(ctx, chatModel, userID, mcpTools)
+	agent, err := m.buildAgent(ctx, modelForAgent, userID, mcpTools)
 	if err != nil {
 		mcpResult.Close()
 		return nil, err
