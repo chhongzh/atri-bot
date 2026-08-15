@@ -31,6 +31,8 @@ func (r *Runner) handlerForText(c telebot.Context) error {
 		if err := r.commands.Dispatch(c, text); err != nil {
 			return err
 		}
+
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
