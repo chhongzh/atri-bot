@@ -12,7 +12,6 @@ import (
 	"github.com/chhongzh/atri-bot/internal/chat"
 	"github.com/chhongzh/atri-bot/internal/command"
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
-	"github.com/chhongzh/atri-bot/internal/debounce"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	"github.com/chhongzh/atri-bot/internal/session"
 	"github.com/chhongzh/atri-bot/internal/tools"
@@ -56,7 +55,6 @@ type Runner struct {
 	characters *character.Manager
 	chats      *chat.Manager
 	commands   *command.Manager
-	debouncer  *debounce.Smart[int64]
 	sessions   *session.Manager
 	tools      *tools.Manager
 	mcp        *mcpmanager.Manager
@@ -71,7 +69,6 @@ func New(logger *zap.Logger, cfg *Config, db *gorm.DB) *Runner {
 		logger:              logger,
 		cfg:                 cfg,
 		db:                  db,
-		debouncer:           debounce.NewSmart[int64](chatDebounceInterval),
 		systemResultDeletes: make(map[int64]func()),
 	}
 }
@@ -83,8 +80,6 @@ func (r *Runner) Start() {
 
 func (r *Runner) Stop() {
 	r.logger.Info("runner shutting down")
-	r.debouncer.Close()
-	r.logger.Debug("chat debouncer closed")
 	r.deleteAllSystemResults()
 	r.logger.Debug("system results cleared")
 	r.chats.Shutdown()

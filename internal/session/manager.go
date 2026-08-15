@@ -33,6 +33,9 @@ const (
 //go:embed compression.j2
 var compressionTemplate string
 
+//go:embed message_meta.j2
+var messageMetadataTemplate string
+
 type CompressionOptions struct {
 	MaxRounds    int
 	SystemPrompt string
@@ -67,9 +70,10 @@ func (w *historyWindow) lastRoundID() uint {
 }
 
 type Manager struct {
-	db       *gorm.DB
-	logger   *zap.Logger
-	template *prompt.DefaultChatTemplate
+	db              *gorm.DB
+	logger          *zap.Logger
+	compression     *prompt.DefaultChatTemplate
+	messageMetadata *prompt.DefaultChatTemplate
 
 	locksMu sync.Mutex
 	locks   map[sessionKey]*sessionLock
@@ -77,25 +81,177 @@ type Manager struct {
 
 func New(db *gorm.DB, logger *zap.Logger) *Manager {
 	return &Manager{
-		db:       db,
-		logger:   logger,
-		template: prompt.FromMessages(schema.Jinja2, schema.SystemMessage(compressionTemplate)),
-		locks:    make(map[sessionKey]*sessionLock),
+		db:              db,
+		logger:          logger,
+		compression:     prompt.FromMessages(schema.Jinja2, schema.SystemMessage(compressionTemplate)),
+		messageMetadata: prompt.FromMessages(schema.Jinja2, schema.SystemMessage(messageMetadataTemplate)),
+		locks:           make(map[sessionKey]*sessionLock),
 	}
 }
 
 func (m *Manager) Init() error {
-	return m.db.AutoMigrate(&model.SessionRound{}, &model.SessionSummary{})
+	return m.db.AutoMigrate(&model.SessionRound{}, &model.SessionMessage{}, &model.SessionSummary{})
 }
 
-func (m *Manager) Load(ctx context.Context, userID int64, characterID string, opts CompressionOptions) ([]*schema.Message, error) {
+func (m *Manager) StartRound(
+	ctx context.Context,
+	userID int64,
+	characterID string,
+	message *schema.Message,
+) (uint, error) {
+	release, err := m.lock(ctx, userID, characterID, "start_round")
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+
+	sentAt := time.Now()
+	metadata, err := m.renderMessageMetadata(ctx, sentAt, false)
+	if err != nil {
+		return 0, err
+	}
+	round := model.SessionRound{UserID: userID, CharacterID: characterID}
+	err = m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if createErr := tx.Create(&round).Error; createErr != nil {
+			return createErr
+		}
+		metadataRecord, createErr := makeSessionMessage(userID, characterID, round.ID, false, metadata)
+		if createErr != nil {
+			return createErr
+		}
+		metadataRecord.MessageMetadata = true
+		metadataRecord.CreatedAt = sentAt
+		messageRecord, createErr := makeSessionMessage(userID, characterID, round.ID, false, message)
+		if createErr != nil {
+			return createErr
+		}
+		messageRecord.CreatedAt = sentAt
+		return tx.Create(&[]model.SessionMessage{metadataRecord, messageRecord}).Error
+	})
+	if err != nil {
+		return 0, err
+	}
+	m.logger.Debug("started session round",
+		zap.Int64("user_id", userID),
+		zap.String("character_id", characterID),
+		zap.Uint("round_id", round.ID),
+	)
+	return round.ID, nil
+}
+
+func (m *Manager) AppendUser(
+	ctx context.Context,
+	userID int64,
+	characterID string,
+	roundID uint,
+	message *schema.Message,
+) error {
+	release, err := m.lock(ctx, userID, characterID, "append_user")
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	sentAt := time.Now()
+	metadata, err := m.renderMessageMetadata(ctx, sentAt, true)
+	if err != nil {
+		return err
+	}
+	metadataRecord, err := makeSessionMessage(userID, characterID, roundID, false, metadata)
+	if err != nil {
+		return err
+	}
+	messageRecord, err := makeSessionMessage(userID, characterID, roundID, false, message)
+	if err != nil {
+		return err
+	}
+	metadataRecord.MessageMetadata = true
+	metadataRecord.CreatedAt = sentAt
+	messageRecord.CreatedAt = sentAt
+	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if createErr := tx.Create(&[]model.SessionMessage{metadataRecord, messageRecord}).Error; createErr != nil {
+			return createErr
+		}
+		result := tx.Model(&model.SessionRound{}).
+			Where("id = ? AND user_id = ? AND character_id = ?", roundID, userID, characterID).
+			Update("interrupted", true)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return fmt.Errorf("session round %d not found", roundID)
+		}
+		return nil
+	})
+}
+
+func (m *Manager) AppendInterrupted(
+	ctx context.Context,
+	userID int64,
+	characterID string,
+	roundID uint,
+	messages ...*schema.Message,
+) error {
+	release, err := m.lock(ctx, userID, characterID, "append_interrupted")
+	if err != nil {
+		return err
+	}
+	defer release()
+	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err = m.appendMessagesDB(tx, userID, characterID, roundID, true, messages...); err != nil {
+			return err
+		}
+		return tx.Model(&model.SessionRound{}).
+			Where("id = ? AND user_id = ? AND character_id = ?", roundID, userID, characterID).
+			Update("interrupted", true).Error
+	})
+}
+
+func (m *Manager) CompleteRound(
+	ctx context.Context,
+	userID int64,
+	characterID string,
+	roundID uint,
+	opts CompressionOptions,
+	messages ...*schema.Message,
+) error {
+	release, err := m.lock(ctx, userID, characterID, "complete_round")
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err = m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err = m.appendMessagesDB(tx, userID, characterID, roundID, false, messages...); err != nil {
+			return err
+		}
+		return tx.Model(&model.SessionRound{}).
+			Where("id = ? AND user_id = ? AND character_id = ?", roundID, userID, characterID).
+			Update("completed", true).Error
+	}); err != nil {
+		return err
+	}
+	m.logger.Debug("completed session round",
+		zap.Int64("user_id", userID),
+		zap.String("character_id", characterID),
+		zap.Uint("round_id", roundID),
+		zap.Int("messages", len(messages)),
+	)
+	window, err := m.loadHistoryWindow(ctx, userID, characterID, 0)
+	if err != nil {
+		return err
+	}
+	_, err = m.maybeCompress(ctx, userID, characterID, "complete_round", normalizeMaxRounds(opts.MaxRounds), opts, window)
+	return err
+}
+
+func (m *Manager) Load(ctx context.Context, userID int64, characterID string, currentRoundID uint, opts CompressionOptions) ([]*schema.Message, error) {
 	release, err := m.lock(ctx, userID, characterID, "load")
 	if err != nil {
 		return nil, err
 	}
 	defer release()
 
-	window, err := m.loadHistoryWindow(ctx, userID, characterID)
+	window, err := m.loadHistoryWindow(ctx, userID, characterID, currentRoundID)
 	if err != nil {
 		return nil, err
 	}
@@ -109,53 +265,55 @@ func (m *Manager) Load(ctx context.Context, userID int64, characterID string, op
 		zap.Bool("has_summary", window.summary != nil),
 		zap.Uint("cutoff_round_id", window.cutoffRoundID()),
 	)
-	return m.maybeCompress(ctx, userID, characterID, "load", maxRounds, opts, window)
+	history, err := m.maybeCompress(ctx, userID, characterID, "load", maxRounds, opts, window)
+	if err != nil || currentRoundID == 0 {
+		return history, err
+	}
+	current, err := m.loadRound(ctx, userID, characterID, currentRoundID)
+	if err != nil {
+		return nil, err
+	}
+	return append(history, current...), nil
 }
 
-func (m *Manager) AppendRound(
-	ctx context.Context,
+func (m *Manager) appendMessagesDB(
+	db *gorm.DB,
 	userID int64,
 	characterID string,
-	opts CompressionOptions,
+	roundID uint,
+	interrupted bool,
 	messages ...*schema.Message,
 ) error {
 	if len(messages) == 0 {
 		return nil
 	}
 	persisted, compactedMessages, removedRunes := compactToolResults(messages)
+	records := make([]model.SessionMessage, 0, len(persisted))
+	for _, message := range persisted {
+		if message == nil {
+			continue
+		}
+		record, err := makeSessionMessage(userID, characterID, roundID, interrupted, message)
+		if err != nil {
+			return err
+		}
+		records = append(records, record)
+	}
+	if len(records) > 0 {
+		if err := db.Create(&records).Error; err != nil {
+			return err
+		}
+	}
 	if compactedMessages > 0 {
 		m.logger.Info("compacted tool results for session history",
 			zap.Int64("user_id", userID),
 			zap.String("character_id", characterID),
+			zap.Uint("round_id", roundID),
 			zap.Int("tool_messages", compactedMessages),
 			zap.Int("removed_characters", removedRunes),
 		)
 	}
-	record, err := makeSessionRound(userID, characterID, persisted)
-	if err != nil {
-		return err
-	}
-	release, err := m.lock(ctx, userID, characterID, "append_round")
-	if err != nil {
-		return err
-	}
-	defer release()
-	if err = m.db.WithContext(ctx).Create(&record).Error; err != nil {
-		return err
-	}
-	m.logger.Debug("appended session round",
-		zap.Int64("user_id", userID),
-		zap.String("character_id", characterID),
-		zap.Uint("round_id", record.ID),
-		zap.Int("messages", len(messages)),
-	)
-	window, err := m.loadHistoryWindow(ctx, userID, characterID)
-	if err != nil {
-		return err
-	}
-	maxRounds := normalizeMaxRounds(opts.MaxRounds)
-	_, err = m.maybeCompress(ctx, userID, characterID, "append_round", maxRounds, opts, window)
-	return err
+	return nil
 }
 
 func (m *Manager) Wait(ctx context.Context, userID int64, characterID string) error {
@@ -294,7 +452,7 @@ func (m *Manager) logCompressionThreshold(
 }
 
 func (m *Manager) renderCompressionInstruction(ctx context.Context, roundCount int) (string, error) {
-	messages, err := m.template.Format(ctx, map[string]any{"RoundCount": roundCount})
+	messages, err := m.compression.Format(ctx, map[string]any{"RoundCount": roundCount})
 	if err != nil {
 		return "", err
 	}
@@ -342,7 +500,7 @@ func runCompressionAgent(ctx context.Context, agent adk.Agent, input []*schema.M
 	return response, nil
 }
 
-func (m *Manager) loadHistoryWindow(ctx context.Context, userID int64, characterID string) (*historyWindow, error) {
+func (m *Manager) loadHistoryWindow(ctx context.Context, userID int64, characterID string, excludedRoundID uint) (*historyWindow, error) {
 	window := &historyWindow{}
 	var summary model.SessionSummary
 	err := m.db.WithContext(ctx).
@@ -361,17 +519,26 @@ func (m *Manager) loadHistoryWindow(ctx context.Context, userID int64, character
 	if window.summary != nil {
 		roundsQuery = roundsQuery.Where("id > ?", window.summary.CutoffRoundID)
 	}
+	if excludedRoundID != 0 {
+		roundsQuery = roundsQuery.Where("id <> ?", excludedRoundID)
+	}
 	if err = roundsQuery.Order("id ASC").Find(&window.rounds).Error; err != nil {
 		return nil, err
 	}
-	window.messages, err = decodeHistoryWindow(window.summary, window.rounds)
+	window.messages, err = m.decodeHistoryWindow(ctx, userID, characterID, window.summary, window.rounds)
 	if err != nil {
 		return nil, err
 	}
 	return window, nil
 }
 
-func decodeHistoryWindow(summary *model.SessionSummary, rounds []model.SessionRound) ([]*schema.Message, error) {
+func (m *Manager) decodeHistoryWindow(
+	ctx context.Context,
+	userID int64,
+	characterID string,
+	summary *model.SessionSummary,
+	rounds []model.SessionRound,
+) ([]*schema.Message, error) {
 	messages := make([]*schema.Message, 0)
 	if summary != nil {
 		var message *schema.Message
@@ -380,24 +547,117 @@ func decodeHistoryWindow(summary *model.SessionSummary, rounds []model.SessionRo
 		}
 		messages = append(messages, message)
 	}
-	for _, record := range rounds {
-		var decoded []*schema.Message
-		if err := json.Unmarshal([]byte(record.Messages), &decoded); err != nil {
-			return nil, fmt.Errorf("decode session round %d: %w", record.ID, err)
+	if len(rounds) == 0 {
+		return messages, nil
+	}
+	roundIDs := make([]uint, 0, len(rounds))
+	for _, round := range rounds {
+		roundIDs = append(roundIDs, round.ID)
+	}
+	var records []model.SessionMessage
+	if err := m.db.WithContext(ctx).
+		Where("user_id = ? AND character_id = ? AND round_id IN ?", userID, characterID, roundIDs).
+		Order("id ASC").
+		Find(&records).Error; err != nil {
+		return nil, err
+	}
+	byRound := make(map[uint][]model.SessionMessage, len(rounds))
+	for _, record := range records {
+		byRound[record.RoundID] = append(byRound[record.RoundID], record)
+	}
+	for _, round := range rounds {
+		formatted, err := m.formatRound(round, byRound[round.ID])
+		if err != nil {
+			return nil, err
 		}
-		compacted, _, _ := compactToolResults(decoded)
-		messages = append(messages, compacted...)
+		messages = append(messages, formatted...)
 	}
 	return messages, nil
 }
 
-func makeSessionRound(userID int64, characterID string, messages []*schema.Message) (model.SessionRound, error) {
-	persisted, _, _ := compactToolResults(messages)
-	data, err := marshalSessionJSON(persisted, "session round")
-	if err != nil {
-		return model.SessionRound{}, err
+func (m *Manager) loadRound(ctx context.Context, userID int64, characterID string, roundID uint) ([]*schema.Message, error) {
+	var round model.SessionRound
+	if err := m.db.WithContext(ctx).
+		Where("id = ? AND user_id = ? AND character_id = ?", roundID, userID, characterID).
+		First(&round).Error; err != nil {
+		return nil, err
 	}
-	return model.SessionRound{UserID: userID, CharacterID: characterID, Messages: data}, nil
+	var records []model.SessionMessage
+	if err := m.db.WithContext(ctx).
+		Where("round_id = ? AND user_id = ? AND character_id = ?", roundID, userID, characterID).
+		Order("id ASC").
+		Find(&records).Error; err != nil {
+		return nil, err
+	}
+	return m.formatRound(round, records)
+}
+
+func (m *Manager) formatRound(round model.SessionRound, records []model.SessionMessage) ([]*schema.Message, error) {
+	messages := make([]*schema.Message, 0, len(records))
+	previousWasMetadata := false
+	for _, record := range records {
+		message, err := decodeSessionMessage(record)
+		if err != nil {
+			return nil, err
+		}
+		if record.MessageMetadata {
+			if message.Role != schema.System {
+				return nil, fmt.Errorf("session metadata message %d is not a system message", record.ID)
+			}
+		} else if message.Role == schema.User && !previousWasMetadata {
+			return nil, fmt.Errorf("session user message %d has no preceding metadata message", record.ID)
+		}
+		messages = append(messages, message)
+		previousWasMetadata = record.MessageMetadata
+	}
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("session round %d contains no messages", round.ID)
+	}
+	return messages, nil
+}
+
+func (m *Manager) renderMessageMetadata(ctx context.Context, sentAt time.Time, interrupted bool) (*schema.Message, error) {
+	messages, err := m.messageMetadata.Format(ctx, map[string]any{
+		"Time":        sentAt.Format(time.RFC3339),
+		"Interrupted": interrupted,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(messages) != 1 {
+		return nil, errors.New("message metadata template returned no message")
+	}
+	return messages[0], nil
+}
+
+func decodeSessionMessage(record model.SessionMessage) (*schema.Message, error) {
+	var message *schema.Message
+	if err := json.Unmarshal([]byte(record.Message), &message); err != nil {
+		return nil, fmt.Errorf("decode session message %d: %w", record.ID, err)
+	}
+	compacted, _, _ := compactToolResults([]*schema.Message{message})
+	return compacted[0], nil
+}
+
+func makeSessionMessage(
+	userID int64,
+	characterID string,
+	roundID uint,
+	interrupted bool,
+	message *schema.Message,
+) (model.SessionMessage, error) {
+	persisted, _, _ := compactToolResults([]*schema.Message{message})
+	data, err := marshalSessionJSON(persisted[0], "session message")
+	if err != nil {
+		return model.SessionMessage{}, err
+	}
+	return model.SessionMessage{
+		UserID:      userID,
+		CharacterID: characterID,
+		RoundID:     roundID,
+		Interrupted: interrupted,
+		Message:     data,
+	}, nil
 }
 
 func compactToolResults(messages []*schema.Message) ([]*schema.Message, int, int) {
