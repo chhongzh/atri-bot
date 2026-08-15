@@ -21,7 +21,7 @@ import (
 
 const (
 	toolName        = "send_mail"
-	toolDescription = `通过 SMTP 使用配置的发件地址发送邮件。支持 HTML 正文、一个或多个主要收件人，以及可选的抄送。`
+	toolDescription = `通过 SMTP 使用配置的发件地址发送邮件。支持 HTML 或纯文本正文（二选一）、一个或多个主要收件人，以及可选的抄送。`
 )
 
 type config struct {
@@ -34,7 +34,8 @@ type config struct {
 
 type input struct {
 	Subject string   `json:"subject" jsonschema:"required" jsonschema_description:"邮件的主题"`
-	Html    string   `json:"html" jsonschema:"required" jsonschema_description:"邮件的 HTML 正文"`
+	Html    string   `json:"html,omitempty" jsonschema_description:"邮件的 HTML 正文，与 text 二选一"`
+	Text    string   `json:"text,omitempty" jsonschema_description:"邮件的纯文本正文，与 html 二选一"`
 	To      []string `json:"to" jsonschema:"required" jsonschema_description:"接收者的邮箱地址"`
 	Cc      []string `json:"cc" jsonschema_description:"抄送者的邮箱地址"`
 }
@@ -58,6 +59,7 @@ func mailTool(ctx context.Context, cfg *config, input *input, allowPrivateIP boo
 	e.Cc = trimAddresses(input.Cc)
 	e.Subject = input.Subject
 	e.HTML = []byte(input.Html)
+	e.Text = []byte(input.Text)
 
 	address := net.JoinHostPort(host, strconv.Itoa(port))
 	if port == 465 {
@@ -157,8 +159,8 @@ func validateInput(input *input) error {
 	if input == nil {
 		return errors.New("邮件内容不能为空")
 	}
-	if len(input.Html) == 0 {
-		return errors.New("正文不能为空")
+	if len(input.Html) == 0 && len(input.Text) == 0 {
+		return errors.New("text 和 html 正文至少提供一个")
 	}
 	if len(trimAddresses(input.To)) == 0 {
 		return errors.New("至少要有一个人收件")
