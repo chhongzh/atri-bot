@@ -31,7 +31,7 @@ func ExpandTelebotContext(c telebot.Context) []zap.Field {
 	if c == nil {
 		return nil
 	}
-	fields := make([]zap.Field, 0, 7)
+	var fields []zap.Field
 	fields = append(fields, ExpandUserFields(c)...)
 	if chat := c.Chat(); chat != nil {
 		fields = append(fields,

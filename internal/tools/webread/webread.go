@@ -10,6 +10,7 @@ import (
 
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/chhongzh/atri-bot/internal/tools/webread/stealth"
+	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/pkg/errors"
@@ -40,8 +41,23 @@ type result struct {
 	PublishedTime string `json:"publishedTime"`
 }
 
-func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *config, input *input, logger *zap.Logger, browser *rod.Browser) (*result, error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Second*300)
+func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *config, input *input, logger *zap.Logger, browser *rod.Browser) (output *result, err error) {
+	startedAt := time.Now()
+	logger = logger.With(utils.ExpandTelebotContext(runningState.TelebotContext)...)
+
+	defer func() {
+		fields := []zap.Field{
+			zap.String("url", input.URL),
+			zap.Duration("duration", time.Since(startedAt)),
+		}
+		if err != nil {
+			logger.Warn("web read failed", append(fields, zap.Error(err))...)
+			return
+		}
+		logger.Info("web read completed", append(fields, zap.Int("size", len(output.TextContent)))...)
+	}()
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
 	defer cancel()
 
 	page, err := browser.Context(ctx).Page(proto.TargetCreateTarget{})
@@ -76,7 +92,6 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 		return nil, errors.Wrap(err, "failed to wait for dom stable")
 	}
 
-	// inject readability
 	evalResult, err := page.Evaluate(rod.Eval(injectScript).ByPromise())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to evaluate result")
