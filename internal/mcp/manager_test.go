@@ -24,7 +24,7 @@ func newTestManager(t *testing.T, runtime configmanager.RuntimeSettings, allowPr
 		t.Fatal(err)
 	}
 	configs := configmanager.New(db)
-	accounts := account.New(db, zap.NewNop(), configs, 36)
+	accounts := account.New(db, zap.NewNop(), configs, 36, configmanager.DefaultImageMaxEdge)
 	if err = accounts.Init(); err != nil {
 		t.Fatal(err)
 	}

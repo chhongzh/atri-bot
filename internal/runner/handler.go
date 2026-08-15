@@ -7,10 +7,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/chhongzh/atri-bot/internal/command"
 	"github.com/chhongzh/atri-bot/internal/errs"
+	filesmanager "github.com/chhongzh/atri-bot/internal/files"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
@@ -34,6 +36,18 @@ func (r *Runner) handlerForText(c telebot.Context) error {
 
 		return nil
 	}
+	return r.handleChatRequest(c, receivedAt, telebot.Typing, func(ctx context.Context) error {
+		return r.chats.Chat(ctx, c, text, receivedAt)
+	})
+}
+
+func (r *Runner) handleChatRequest(
+	c telebot.Context,
+	receivedAt time.Time,
+	action telebot.ChatAction,
+	chat func(context.Context) error,
+) error {
+	fields := utils.ExpandTelebotContext(c)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	preparationStartedAt := time.Now()
@@ -56,14 +70,14 @@ func (r *Runner) handlerForText(c telebot.Context) error {
 		)...,
 	)
 	notifyStartedAt := time.Now()
-	if err := c.Notify(telebot.Typing); err != nil {
+	if err := c.Notify(action); err != nil {
 		return err
 	}
 	notifyDuration := time.Since(notifyStartedAt)
-	go r.maintainChatAction(ctx, c)
+	go r.maintainChatAction(ctx, c, action)
 
 	chatStartedAt := time.Now()
-	chatErr := r.chats.Chat(ctx, c, text, receivedAt)
+	chatErr := chat(ctx)
 	chatDuration := time.Since(chatStartedAt)
 	if err := r.handleChatError(c, chatErr, fields); err != nil {
 		r.logger.Debug("telegram chat request failed",
@@ -102,7 +116,7 @@ func (r *Runner) handleChatError(c telebot.Context, err error, fields []zap.Fiel
 	return err
 }
 
-func (r *Runner) maintainChatAction(ctx context.Context, c telebot.Context) {
+func (r *Runner) maintainChatAction(ctx context.Context, c telebot.Context, action telebot.ChatAction) {
 	ticker := time.NewTicker(chatActionRefreshInterval)
 	defer ticker.Stop()
 	for {
@@ -110,7 +124,7 @@ func (r *Runner) maintainChatAction(ctx context.Context, c telebot.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := c.Notify(telebot.Typing); err != nil {
+			if err := c.Notify(action); err != nil {
 				r.logger.Debug("failed to refresh chat action",
 					append(utils.ExpandTelebotContext(c), zap.Error(err))...,
 				)
@@ -121,6 +135,91 @@ func (r *Runner) maintainChatAction(ctx context.Context, c telebot.Context) {
 
 func (r *Runner) handlerForUnsupportedMedia(telebot.Context) error {
 	return nil
+}
+
+func (r *Runner) handlerForMedia(c telebot.Context) error {
+	receivedAt := time.Now()
+	settings, err := r.accounts.Settings(context.Background(), c.Sender().ID)
+	if err != nil {
+		return err
+	}
+	kind, file, name, caption := telegramMedia(c.Message())
+	if file == nil {
+		return nil
+	}
+	if kind == "" {
+		return nil
+	}
+	characterID := settings.CharacterID
+	if characterID == "" {
+		character, ok := r.characters.Default()
+		if !ok {
+			return errs.ErrNoCharacters
+		}
+		characterID = character.ID
+	}
+	if strings.TrimSpace(caption) == "" {
+		caption = "用户发送了" + map[string]string{"image": "一张图片", "audio": "一段音频", "video": "一段视频"}[kind]
+	}
+	return r.handleChatRequest(c, receivedAt, mediaChatAction(kind), func(ctx context.Context) error {
+		if file.FileSize > filesmanager.MaxBytes {
+			return fmt.Errorf("媒体文件不能超过 %d MB", filesmanager.MaxBytes>>20)
+		}
+		body, fileErr := c.Bot().File(file)
+		if fileErr != nil {
+			return fmt.Errorf("从 Telegram 读取媒体: %w", fileErr)
+		}
+		ref, saveErr := r.files.Save(ctx, kind, name, settings.AIImageMaxEdge, body, file.FileSize)
+		if saveErr != nil {
+			return fmt.Errorf("保存媒体: %w", saveErr)
+		}
+		return r.chats.ChatMedia(ctx, c, caption, []filesmanager.Ref{ref}, receivedAt)
+	})
+}
+
+func mediaChatAction(kind string) telebot.ChatAction {
+	switch kind {
+	case "image":
+		return telebot.UploadingPhoto
+	case "audio":
+		return telebot.UploadingAudio
+	case "video":
+		return telebot.UploadingVideo
+	default:
+		return telebot.Typing
+	}
+}
+
+func telegramMedia(message *telebot.Message) (kind string, file *telebot.File, name, caption string) {
+	if message == nil {
+		return
+	}
+	switch {
+	case message.Photo != nil:
+		return "image", &message.Photo.File, "photo.jpg", message.Photo.Caption
+	case message.Voice != nil:
+		return "audio", &message.Voice.File, "voice.ogg", message.Voice.Caption
+	case message.Audio != nil:
+		return "audio", &message.Audio.File, message.Audio.FileName, message.Audio.Caption
+	case message.Video != nil:
+		return "video", &message.Video.File, message.Video.FileName, message.Video.Caption
+	case message.Animation != nil:
+		return "video", &message.Animation.File, message.Animation.FileName, message.Animation.Caption
+	case message.VideoNote != nil:
+		return "video", &message.VideoNote.File, "video-note.mp4", ""
+	case message.Document != nil:
+		mime := strings.ToLower(message.Document.MIME)
+		if strings.HasPrefix(mime, "image/") {
+			return "image", &message.Document.File, message.Document.FileName, message.Document.Caption
+		}
+		if strings.HasPrefix(mime, "audio/") {
+			return "audio", &message.Document.File, message.Document.FileName, message.Document.Caption
+		}
+		if strings.HasPrefix(mime, "video/") {
+			return "video", &message.Document.File, message.Document.FileName, message.Document.Caption
+		}
+	}
+	return
 }
 
 func (r *Runner) handlerForError(err error, c telebot.Context) {

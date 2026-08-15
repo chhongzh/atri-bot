@@ -12,6 +12,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/chat"
 	"github.com/chhongzh/atri-bot/internal/command"
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
+	filesmanager "github.com/chhongzh/atri-bot/internal/files"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	"github.com/chhongzh/atri-bot/internal/session"
 	"github.com/chhongzh/atri-bot/internal/tools"
@@ -34,12 +35,15 @@ type Config struct {
 
 	StateTTL               time.Duration
 	DefaultMaxRounds       int
+	DefaultImageMaxEdge    int
 	DefaultToolPermissions map[string]bool
 
 	AIModelTimeout time.Duration
 	AllowPrivateIP bool
 
-	MCPDefaultMaxTools int
+	MCPDefaultMaxTools   int
+	FilesMaxStorageBytes int64
+	FilesCleanupAfter    time.Duration
 
 	ToolRegistrars []tools.Registrar
 }
@@ -58,6 +62,7 @@ type Runner struct {
 	sessions   *session.Manager
 	tools      *tools.Manager
 	mcp        *mcpmanager.Manager
+	files      *filesmanager.Manager
 
 	systemResultMu      sync.Mutex
 	systemResultDeletes map[int64]func()
@@ -84,6 +89,8 @@ func (r *Runner) Stop() {
 	r.logger.Debug("system results cleared")
 	r.chats.Shutdown()
 	r.logger.Debug("chat states shut down")
+	r.files.Close()
+	r.logger.Debug("media file cleanup stopped")
 	r.mcp.Close()
 	r.logger.Debug("mcp workers closed")
 	r.bot.Stop()
