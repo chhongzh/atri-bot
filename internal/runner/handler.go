@@ -33,6 +33,8 @@ func (r *Runner) handlerForText(c telebot.Context) error {
 		if err := r.commands.Dispatch(c, text); err != nil {
 			return err
 		}
+
+		return nil
 	}
 	return r.handleChatRequest(c, receivedAt, telebot.Typing, func(ctx context.Context) error {
 		return r.chats.Chat(ctx, c, text, receivedAt)
