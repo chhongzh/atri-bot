@@ -146,6 +146,22 @@ atri_cwd: "."
 - `files.cleanup_after` 本地媒体保留时间，默认 `7d`，支持 `1d`、`3d` 及 `time.ParseDuration` 接受的格式。
 - `atri_cwd` 数据和本地角色的根目录，默认当前目录。数据库文件和远程角色缓存都放在这里。
 
+### Docker 部署
+
+发布时会自动构建 `linux/amd64`、`linux/arm64` 镜像并推送到 GHCR：
+
+```bash
+docker pull ghcr.io/chhongzh/atri-bot:latest
+mkdir -p /data/atri
+docker run -d --name atri-bot \
+  -e TZ=Asia/Shanghai \
+  -v /data/atri:/data \
+  --restart unless-stopped \
+  ghcr.io/chhongzh/atri-bot:latest
+```
+
+把 `config.yaml` 放进挂载目录后重启容器。镜像默认时区为 `Asia/Shanghai`，可用 `-e TZ=...` 覆盖，数据库和媒体文件都存放在 `/data`。
+
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
 ## 使用方法
@@ -234,7 +250,8 @@ Telegram 里的命令就够，没必要再做一个网页。
 
 PR 或分支推送时，CI 会自动跑一次 goreleaser snapshot，验证所有目标平台都能编译，不创建 Release。手动发布在 GitHub Actions
 里触发，填版本号和是否草稿。版本号自动补 `v` 前缀并打 tag，默认以草稿形式发布，确认无误后在 Release 页面手动发布。Android 产物在
-CI 中用 Android NDK 交叉编译。
+CI 中用 Android NDK 交叉编译。正式发布还会构建 `linux/amd64`、`linux/arm64` 的 Docker 镜像，推送
+`ghcr.io/chhongzh/atri-bot` 的 `{{ tag }}` 与 `latest` 标签。
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
