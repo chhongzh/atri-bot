@@ -151,10 +151,13 @@ func (r *Runner) handlerForMedia(c telebot.Context) error {
 	if kind == "" {
 		return nil
 	}
-	if settings.CharacterID == "" {
-		if _, ok := r.characters.Default(); !ok {
+	characterID := settings.CharacterID
+	if characterID == "" {
+		character, ok := r.characters.Default()
+		if !ok {
 			return errs.ErrNoCharacters
 		}
+		characterID = character.ID
 	}
 	if strings.TrimSpace(caption) == "" {
 		caption = "用户发送了" + map[string]string{"image": "一张图片", "audio": "一段音频", "video": "一段视频"}[kind]

@@ -80,7 +80,7 @@ func (m *Manager) Close() {
 }
 
 func (m *Manager) Save(ctx context.Context, kind, name string, imageMaxEdge int, body io.ReadCloser, declaredSize int64) (Ref, error) {
-	defer func() { _ = body.Close() }()
+	defer body.Close()
 	if err := ctx.Err(); err != nil {
 		return Ref{}, err
 	}
@@ -99,7 +99,7 @@ func (m *Manager) Save(ctx context.Context, kind, name string, imageMaxEdge int,
 		return Ref{}, err
 	}
 	temporaryName := temporary.Name()
-	defer func() { _ = os.Remove(temporaryName) }()
+	defer os.Remove(temporaryName)
 	digest := sha256.New()
 	var written int64
 	var copyErr error
@@ -313,7 +313,7 @@ func fileMIME(path, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = file.Close() }()
+	defer file.Close()
 	prefix := make([]byte, 512)
 	read, err := file.Read(prefix)
 	if err != nil && !errors.Is(err, io.EOF) {
