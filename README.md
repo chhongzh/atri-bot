@@ -8,6 +8,10 @@
 
 <br />
 <div align="center">
+  <img src="misc/Banner.png" alt="atri-bot Banner" width="100%" />
+
+  <p align="center"><small>角色为 ATRI，截图出自《ATRI -My Dear Moments-》E6 10:21</small></p>
+
   <h3 align="center">atri-bot</h3>
 
   <p align="center">
@@ -25,6 +29,7 @@
 <details>
   <summary>目录</summary>
   <ol>
+    <li><a href="#项目起源">项目起源</a></li>
     <li><a href="#项目简介">项目简介</a></li>
     <li><a href="#快速开始">快速开始</a></li>
     <li><a href="#使用方法">使用方法</a></li>
@@ -36,6 +41,16 @@
     <li><a href="#致谢">致谢</a></li>
   </ol>
 </details>
+
+## 项目起源
+
+atri-bot 的起点是《ATRI -My Dear Moments-》。玩完这部作品之后，主角 Atri 在我心里留下了很深的印象。我想让 Atri 来到现实，于是动手写了这个项目。
+
+项目起初只是一个非常简单的 OpenAI API 封装，能在 Telegram 里回消息，仅此而已。后来它在抖音上小火了一把，收获了一些关注。说实话，当时很意外，也很感动。之后我把重心放到 v2 分支上，继续开发，一点一点把它变成现在这个样子。
+
+现在的 atri-bot 已经是一个完整的聊天机器人，跨平台，高性能，轻量化，支持多用户、多角色、多模态。走了这么远，最初的念头一直没有变。
+
+<p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
 ## 项目简介
 
@@ -126,13 +141,6 @@ docker run -d --name atri-bot \
 - [命令与工具](docs/usage.md) 命令、AI 配置、角色与 chardef、工具与 MCP。
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
-
-## 后续计划
-
-- [ ] RAG 记忆库接入。给角色一个可检索的长期记忆，不再只靠窗口内的对话历史。
-- [ ] 更多 Web 相关内置工具。查资料、读网页这类能力会陆续补上。
-
-当前状态。角色切换、多用户、工具权限、MCP 管理这些核心功能已经可用。
 
 ### 明确不做的事
 
