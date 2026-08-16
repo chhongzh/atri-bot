@@ -4,14 +4,9 @@
 package utils
 
 import (
-	"unicode/utf8"
-
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 )
-
-// telebotTextPreviewLimit 日志中文本预览的最大字符数。
-const telebotTextPreviewLimit = 128
 
 // ExpandUserFields 生成当前发送者对应的 zap 字段。
 func ExpandUserFields(c telebot.Context) []zap.Field {
@@ -42,11 +37,4 @@ func ExpandTelebotContext(c telebot.Context) []zap.Field {
 		fields = append(fields, zap.Int("message_id", message.ID))
 	}
 	return fields
-}
-
-func telebotTextPreview(text string) string {
-	if utf8.RuneCountInString(text) <= telebotTextPreviewLimit {
-		return text
-	}
-	return string([]rune(text)[:telebotTextPreviewLimit]) + "…"
 }
