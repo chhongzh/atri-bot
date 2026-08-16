@@ -1,0 +1,9 @@
+services:
+  atri-bot:
+    image: ghcr.io/chhongzh/atri-bot:latest
+    container_name: atri-bot
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ./atri-data:/data

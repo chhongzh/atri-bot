@@ -1,0 +1,19 @@
+<message_metadata>
+    <current_time>
+        {{ Time }}
+    </current_time>
+
+    <current_state>
+        {% if Interrupted %}
+        用户发送了一条新消息并打断了你。
+        {% else %}
+        用户正常地发送了一条消息。
+        {% endif %}
+    </current_state>
+
+    {% if Interrupted %}
+    <interrupt_info>
+        请根据会话历史、你之前仍未完成编辑的文本以及用户随后发送的新消息，重新考虑并自然地衔接处理。不要重复已经发送过的内容。
+    </interrupt_info>
+    {% endif %}
+</message_metadata>

@@ -1,0 +1,101 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: desktop
+    # 桌面端御三家：Windows / macOS / Linux
+    main: ./cmd/atri-bot
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+      # go build -x：在 CI 日志中显示编译进度
+
+
+
+  - id: android-arm64
+    # Android arm64 不需要 CGO，可直接交叉编译。
+    main: ./cmd/atri-bot
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - android
+    goarch:
+      - arm64
+    # go build -x：在 CI 日志中显示编译进度
+
+
+
+  - id: android-amd64
+    # Go 对 android/amd64 要求外部链接，使用 NDK clang。
+    main: ./cmd/atri-bot
+    env:
+      - CGO_ENABLED=1
+      - CC={{ .Env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang
+    goos:
+      - android
+    goarch:
+      - amd64
+    # go build -x：在 CI 日志中显示编译进度
+
+
+
+archives:
+  - id: desktop
+    ids: [ desktop ]
+    formats: [ tar.gz ]
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        formats: [ zip ]
+
+  - id: android
+    ids: [ android-arm64, android-amd64 ]
+    # Android 不打压缩包，直接发布可执行文件
+    formats: [ binary ]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+
+dockers_v2:
+  - id: linux
+    ids: [ desktop ]
+    dockerfile: Dockerfile
+    images:
+      - "ghcr.io/chhongzh/atri-bot"
+    tags:
+      - "{{ .Tag }}"
+      - "latest"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    build_args:
+      TZ: "{{ .Env.TZ }}"
+    disable: "{{ .IsSnapshot }}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+release:
+  footer: >-
+    Made with Love!
