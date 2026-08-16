@@ -25,6 +25,9 @@ const (
 //go:embed inject.js
 var injectScript string
 
+//go:embed Readability.js
+var readabilityScript string
+
 type config struct {
 }
 
@@ -51,7 +54,7 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 			zap.Duration("duration", time.Since(startedAt)),
 		}
 		if err != nil {
-			logger.Warn("web read failed", append(fields, zap.Error(err))...)
+			logger.Error("web read failed", append(fields, zap.Error(err))...)
 			return
 		}
 		logger.Info("web read completed", append(fields, zap.Int("size", len(output.TextContent)))...)
@@ -60,7 +63,7 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
 	defer cancel()
 
-	page, err := browser.Context(ctx).Page(proto.TargetCreateTarget{})
+	page, err := browser.Page(proto.TargetCreateTarget{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open blank page")
 	}
@@ -70,6 +73,7 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 			logger.Warn("failed to close page, this may cause leakage!", zap.Error(err))
 		}
 	}(page)
+	page = page.Context(ctx)
 
 	remove, err := stealth.Inject(page)
 	if err != nil {
@@ -81,6 +85,17 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 			logger.Warn("failed to remove eval", zap.Error(err))
 		}
 	}(remove)
+
+	removeReadability, err := page.EvalOnNewDocument(readabilityScript)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to install readability script")
+	}
+	defer func(remove func() error) {
+		err := remove()
+		if err != nil {
+			logger.Warn("failed to remove readability eval", zap.Error(err))
+		}
+	}(removeReadability)
 
 	err = page.Navigate(input.URL)
 	if err != nil {
