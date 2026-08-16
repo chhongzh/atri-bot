@@ -1,6 +1,6 @@
 module github.com/chhongzh/atri-bot
 
-go 1.27rc2
+go 1.27rc3
 
 require (
 	github.com/antchfx/htmlquery v1.3.6
