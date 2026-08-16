@@ -6,17 +6,17 @@ package email
 import (
 	"context"
 	"crypto/tls"
-	"errors"
-	"fmt"
 	"net"
 	"net/mail"
 	"net/smtp"
 	"strconv"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/security"
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/jordan-wright/email"
+	pkgErrors "github.com/pkg/errors"
 )
 
 const (
@@ -68,7 +68,7 @@ func mailTool(ctx context.Context, cfg *config, input *input, allowPrivateIP boo
 		err = sendWithStartTLS(ctx, e, address, host, auth, allowPrivateIP)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("send email via %s: %w", address, err)
+		return nil, pkgErrors.Wrapf(err, "send email via %s", address)
 	}
 
 	return &result{Delivered: true}, nil
@@ -124,7 +124,7 @@ func sendSMTP(e *email.Email, connection net.Conn, host string, auth smtp.Auth, 
 	}
 	recipients := append(append([]string{}, e.To...), e.Cc...)
 	if len(recipients) == 0 {
-		return errors.New("at least one recipient is required")
+		return errs.ErrEmailNoRecipients
 	}
 	if err = client.Mail(from.Address); err != nil {
 		return err
@@ -157,17 +157,17 @@ func sendSMTP(e *email.Email, connection net.Conn, host string, auth smtp.Auth, 
 
 func validateInput(input *input) error {
 	if input == nil {
-		return errors.New("邮件内容不能为空")
+		return errs.ErrEmailContentEmpty
 	}
 	if len(input.Html) == 0 && len(input.Text) == 0 {
-		return errors.New("text 和 html 正文至少提供一个")
+		return errs.ErrEmailBodyMissing
 	}
 	if len(trimAddresses(input.To)) == 0 {
-		return errors.New("至少要有一个人收件")
+		return errs.ErrEmailNoRecipients
 	}
 	for _, address := range append(trimAddresses(input.To), trimAddresses(input.Cc)...) {
 		if _, err := mail.ParseAddress(address); err != nil {
-			return fmt.Errorf("无效的收件人地址 %q: %w", address, err)
+			return pkgErrors.Wrapf(err, "invalid recipient address %q", address)
 		}
 	}
 	return nil
@@ -176,19 +176,19 @@ func validateInput(input *input) error {
 func validateConfig(cfg *config) (string, int, smtp.Auth, error) {
 	host := strings.TrimSpace(cfg.SmtpHost)
 	if host == "" {
-		return "", 0, nil, errors.New("smtpHost 不能为空")
+		return "", 0, nil, errs.ErrEmailSMTPHostEmpty
 	}
 	if cfg.SmtpPort < 1 || cfg.SmtpPort > 65535 {
-		return "", 0, nil, fmt.Errorf("smtpPort 必须介于 1 和 65535 之间，当前为 %d", cfg.SmtpPort)
+		return "", 0, nil, errs.EmailInvalidSMTPPort(cfg.SmtpPort)
 	}
 	from := strings.TrimSpace(cfg.FromAddress)
 	if _, err := mail.ParseAddress(from); err != nil {
-		return "", 0, nil, fmt.Errorf("无效的 fromAddress: %w", err)
+		return "", 0, nil, pkgErrors.Wrap(err, "invalid from address")
 	}
 	username := strings.TrimSpace(cfg.Username)
 	password := strings.TrimSpace(cfg.Password)
 	if (username == "") != (password == "") {
-		return "", 0, nil, errors.New("username 和 password 必须同时配置")
+		return "", 0, nil, errs.ErrEmailCredentialsIncomplete
 	}
 	if username == "" {
 		return host, cfg.SmtpPort, nil, nil

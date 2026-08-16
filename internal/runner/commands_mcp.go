@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
@@ -25,13 +26,13 @@ func (r *Runner) commandMCP(c telebot.Context, args []string) {
 	sender := c.Sender()
 	action := commandAction(args, "")
 	if action == "" {
-		r.commandError(c, fmt.Errorf("用法：/mcp <show|limit> <user-id> [value]"))
+		r.commandError(c, errs.CommandUsage("/mcp <show|limit> <user-id> [value]"))
 		return
 	}
 	switch action {
 	case "show", "limit":
 	default:
-		r.commandError(c, fmt.Errorf("未知 MCP 操作 %q", action))
+		r.commandError(c, errs.UnknownMCPAction(action))
 		return
 	}
 	targetID, err := parseUserID(args, 1, "/mcp "+action+" <user-id> [value]")
@@ -53,7 +54,7 @@ func (r *Runner) commandMCP(c telebot.Context, args []string) {
 	case "limit":
 		limit, parseErr := strconv.Atoi(strings.TrimSpace(args[2]))
 		if parseErr != nil || limit < 0 {
-			err = fmt.Errorf("limit 必须是非负整数（0 表示恢复默认）")
+			err = errs.ErrInvalidMCPLimit
 		} else {
 			err = r.accounts.SetMCPMaxTools(ctx, sender.ID, targetID, limit)
 		}

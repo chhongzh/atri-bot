@@ -7,15 +7,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/model"
+	pkgErrors "github.com/pkg/errors"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
-
-var ErrNotFound = errors.New("configuration not found")
 
 type Manager struct {
 	db *gorm.DB
@@ -56,13 +55,13 @@ func query[T any](ctx context.Context, manager *Manager, scope string, userID in
 	var record model.Config
 	err = manager.db.WithContext(ctx).First(&record, "scope = ? AND user_id = ? AND key = ?", scope, userID, key).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return zero, fmt.Errorf("%w: %s", ErrNotFound, key)
+		return zero, errs.ConfigNotFound(key)
 	}
 	if err != nil {
 		return zero, err
 	}
 	if err = json.Unmarshal([]byte(record.Value), &zero); err != nil {
-		return zero, fmt.Errorf("decode configuration %q: %w", key, err)
+		return zero, pkgErrors.Wrapf(err, "decode configuration %q", key)
 	}
 	return zero, nil
 }
@@ -74,7 +73,7 @@ func set[T any](ctx context.Context, manager *Manager, scope string, userID int6
 	}
 	data, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Errorf("encode configuration %q: %w", key, err)
+		return pkgErrors.Wrapf(err, "encode configuration %q", key)
 	}
 	record := model.Config{Scope: scope, UserID: userID, Key: key, Value: string(data)}
 	return manager.db.WithContext(ctx).Clauses(clause.OnConflict{
@@ -90,7 +89,7 @@ func set[T any](ctx context.Context, manager *Manager, scope string, userID int6
 func normalizeKey(key string) (string, error) {
 	key = strings.TrimSpace(key)
 	if key == "" {
-		return "", errors.New("configuration key is required")
+		return "", errs.ErrConfigKeyRequired
 	}
 	return key, nil
 }

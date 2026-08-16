@@ -8,17 +8,18 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/chhongzh/atri-bot/internal/constants"
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/chhongzh/atri-bot/internal/msgops"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/prompt"
 	"github.com/cloudwego/eino/schema"
+	pkgErrors "github.com/pkg/errors"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -178,7 +179,7 @@ func (m *Manager) AppendUser(
 			return result.Error
 		}
 		if result.RowsAffected != 1 {
-			return fmt.Errorf("session round %d not found", roundID)
+			return errs.SessionRoundNotFound(roundID)
 		}
 		return nil
 	})
@@ -375,11 +376,11 @@ func (m *Manager) compress(
 	response, err := runCompressionAgent(ctx, opts.Agent, input)
 	if err != nil {
 		m.logCompressionFailure(userID, characterID, trigger, roundCount, cutoffRoundID, startedAt, err)
-		return nil, fmt.Errorf("compress session history: %w", err)
+		return nil, pkgErrors.Wrap(err, "compress session history")
 	}
 	compressed := strings.TrimSpace(msgops.AssistantText(response))
 	if compressed == "" {
-		err = errors.New("compression model returned empty history")
+		err = errs.ErrCompressionEmptyHistory
 		m.logCompressionFailure(userID, characterID, trigger, roundCount, cutoffRoundID, startedAt, err)
 		return nil, err
 	}
@@ -456,7 +457,7 @@ func (m *Manager) renderCompressionInstruction(ctx context.Context, roundCount i
 		return "", err
 	}
 	if len(messages) != 1 {
-		return "", errors.New("compression template returned no message")
+		return "", errs.ErrCompressionTemplateNoMessage
 	}
 	return messages[0].Content, nil
 }
@@ -494,7 +495,7 @@ func runCompressionAgent(ctx context.Context, agent adk.Agent, input []*schema.M
 		}
 	}
 	if response == nil {
-		return nil, errors.New("compression agent returned no assistant message")
+		return nil, errs.ErrCompressionAgentNoMessage
 	}
 	return response, nil
 }
@@ -542,7 +543,7 @@ func (m *Manager) decodeHistoryWindow(
 	if summary != nil {
 		var message *schema.Message
 		if err := json.Unmarshal([]byte(summary.Message), &message); err != nil {
-			return nil, fmt.Errorf("decode session summary %d: %w", summary.ID, err)
+			return nil, pkgErrors.Wrapf(err, "decode session summary %d", summary.ID)
 		}
 		messages = append(messages, message)
 	}
@@ -601,16 +602,16 @@ func (m *Manager) formatRound(round model.SessionRound, records []model.SessionM
 		}
 		if record.MessageMetadata {
 			if message.Role != schema.System {
-				return nil, fmt.Errorf("session metadata message %d is not a system message", record.ID)
+				return nil, errs.SessionMetadataNotSystem(record.ID)
 			}
 		} else if message.Role == schema.User && !previousWasMetadata {
-			return nil, fmt.Errorf("session user message %d has no preceding metadata message", record.ID)
+			return nil, errs.SessionUserNoMetadata(record.ID)
 		}
 		messages = append(messages, message)
 		previousWasMetadata = record.MessageMetadata
 	}
 	if len(messages) == 0 {
-		return nil, fmt.Errorf("session round %d contains no messages", round.ID)
+		return nil, errs.SessionRoundEmpty(round.ID)
 	}
 	return messages, nil
 }
@@ -624,7 +625,7 @@ func (m *Manager) renderMessageMetadata(ctx context.Context, sentAt time.Time, i
 		return nil, err
 	}
 	if len(messages) != 1 {
-		return nil, errors.New("message metadata template returned no message")
+		return nil, errs.ErrMessageMetadataTemplateNoMessage
 	}
 	return messages[0], nil
 }
@@ -632,7 +633,7 @@ func (m *Manager) renderMessageMetadata(ctx context.Context, sentAt time.Time, i
 func decodeSessionMessage(record model.SessionMessage) (*schema.Message, error) {
 	var message *schema.Message
 	if err := json.Unmarshal([]byte(record.Message), &message); err != nil {
-		return nil, fmt.Errorf("decode session message %d: %w", record.ID, err)
+		return nil, pkgErrors.Wrapf(err, "decode session message %d", record.ID)
 	}
 	compacted, _, _ := compactToolResults([]*schema.Message{message})
 	return compacted[0], nil
@@ -716,7 +717,7 @@ func makeSessionSummary(userID int64, characterID string, cutoffRoundID uint, me
 func marshalSessionJSON(v any, what string) (string, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
-		return "", fmt.Errorf("encode %s: %w", what, err)
+		return "", pkgErrors.Wrapf(err, "encode %s", what)
 	}
 	return string(data), nil
 }

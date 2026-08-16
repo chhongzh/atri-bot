@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"image"
 	_ "image/gif"
 	"image/jpeg"
@@ -23,6 +22,8 @@ import (
 	"time"
 
 	"github.com/chhongzh/atri-bot/internal/constants"
+	"github.com/chhongzh/atri-bot/internal/errs"
+	pkgErrors "github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
@@ -85,7 +86,7 @@ func (m *Manager) Save(ctx context.Context, kind, name string, imageMaxEdge int,
 		return Ref{}, err
 	}
 	if declaredSize > constants.MaxUploadFileBytes {
-		return Ref{}, fmt.Errorf("媒体文件不能超过 %d MB", constants.MaxUploadFileBytes>>20)
+		return Ref{}, errs.FileTooLarge(constants.MaxUploadFileBytes >> 20)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -122,7 +123,7 @@ func (m *Manager) Save(ctx context.Context, kind, name string, imageMaxEdge int,
 		return Ref{}, closeErr
 	}
 	if written > constants.MaxUploadFileBytes {
-		return Ref{}, fmt.Errorf("媒体文件不能超过 %d MB", constants.MaxUploadFileBytes>>20)
+		return Ref{}, errs.FileTooLarge(constants.MaxUploadFileBytes >> 20)
 	}
 	if err = ctx.Err(); err != nil {
 		return Ref{}, err
@@ -148,7 +149,7 @@ func (m *Manager) Save(ctx context.Context, kind, name string, imageMaxEdge int,
 		return Ref{}, err
 	}
 	if used+written > m.maxBytes {
-		return Ref{}, fmt.Errorf("本地媒体池已达到 %d MB 上限", m.maxBytes>>20)
+		return Ref{}, errs.MediaPoolFull(m.maxBytes >> 20)
 	}
 	if err = os.Rename(temporaryName, path); err != nil {
 		return Ref{}, err
@@ -161,23 +162,23 @@ func resizeImage(destination io.Writer, source io.Reader, maxEdge int) (int64, e
 		maxEdge = constants.DefaultImageMaxEdge
 	}
 	if maxEdge > constants.MaxImageMaxEdge {
-		return 0, fmt.Errorf("图片最长边不能超过 %d 像素", constants.MaxImageMaxEdge)
+		return 0, errs.ImageMaxEdgeExceeded(constants.MaxImageMaxEdge)
 	}
 	data, err := io.ReadAll(io.LimitReader(source, constants.MaxUploadFileBytes+1))
 	if err != nil {
 		return 0, err
 	}
 	if int64(len(data)) > constants.MaxUploadFileBytes {
-		return 0, fmt.Errorf("媒体文件不能超过 %d MB", constants.MaxUploadFileBytes>>20)
+		return 0, errs.FileTooLarge(constants.MaxUploadFileBytes >> 20)
 	}
 	decoded, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		return 0, fmt.Errorf("解码图片: %w", err)
+		return 0, pkgErrors.Wrap(err, "decode image")
 	}
 	bounds := decoded.Bounds()
 	width, height := bounds.Dx(), bounds.Dy()
 	if width <= 0 || height <= 0 {
-		return 0, errors.New("图片尺寸无效")
+		return 0, errs.ErrInvalidImageDimensions
 	}
 	longest := max(width, height)
 	output := image.Image(decoded)
@@ -190,7 +191,7 @@ func resizeImage(destination io.Writer, source io.Reader, maxEdge int) (int64, e
 	}
 	counter := &countingWriter{writer: destination}
 	if err = jpeg.Encode(counter, output, &jpeg.Options{Quality: imageQuality}); err != nil {
-		return 0, fmt.Errorf("编码图片: %w", err)
+		return 0, pkgErrors.Wrap(err, "encode image")
 	}
 	return counter.written, nil
 }

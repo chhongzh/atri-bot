@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/chhongzh/atri-bot/internal/security"
+	"github.com/chhongzh/atri-bot/internal/errs"
 )
 
 func TestMailToolBlocksPrivateSMTPHost(t *testing.T) {
@@ -21,7 +21,7 @@ func TestMailToolBlocksPrivateSMTPHost(t *testing.T) {
 		Html:    "body",
 		To:      []string{"recipient@example.com"},
 	}, false)
-	if !errors.Is(err, security.ErrPrivateAddressBlocked) {
-		t.Fatalf("mailTool() error = %v, want ErrPrivateAddressBlocked", err)
+	if !errors.Is(err, errs.ErrPrivateAddressBlocked) {
+		t.Fatalf("mailTool() error = %v, want errs.ErrPrivateAddressBlocked", err)
 	}
 }

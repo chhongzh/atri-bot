@@ -5,16 +5,14 @@ package security
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
+	"github.com/pkg/errors"
 	"golang.org/x/net/proxy"
 )
-
-var ErrPrivateAddressBlocked = errors.New("network address points to an internal or private network")
 
 type SafeDialer struct {
 	base           proxy.ContextDialer
@@ -30,10 +28,10 @@ func (s *SafeDialer) DialContext(ctx context.Context, network, address string) (
 
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
-		return nil, fmt.Errorf("parse dial address: %w", err)
+		return nil, errors.Wrap(err, "parse dial address")
 	}
 	if IsInternalHost(host) {
-		return nil, ErrPrivateAddressBlocked
+		return nil, errs.ErrPrivateAddressBlocked
 	}
 	addresses, err := lookupPublicAddresses(ctx, host, "dial host")
 	if err != nil {
@@ -48,7 +46,7 @@ func (s *SafeDialer) DialContext(ctx context.Context, network, address string) (
 		}
 		lastErr = dialErr
 	}
-	return nil, fmt.Errorf("dial host: %w", lastErr)
+	return nil, errors.Wrap(lastErr, "dial host")
 }
 
 // NewSafeHTTPTransport returns a transport that preserves the configured proxy
@@ -94,7 +92,7 @@ func allowsPrivateDial(ctx context.Context) bool {
 // ValidateHost rejects internal hostnames and hosts resolving to private IP addresses.
 func ValidateHost(ctx context.Context, host string) error {
 	if IsInternalHost(host) {
-		return ErrPrivateAddressBlocked
+		return errs.ErrPrivateAddressBlocked
 	}
 	_, err := lookupPublicAddresses(ctx, host, "host")
 	return err
@@ -103,14 +101,14 @@ func ValidateHost(ctx context.Context, host string) error {
 func lookupPublicAddresses(ctx context.Context, host, subject string) ([]net.IPAddr, error) {
 	addresses, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 	if err != nil {
-		return nil, fmt.Errorf("resolve %s: %w", subject, err)
+		return nil, errors.Wrapf(err, "resolve %s", subject)
 	}
 	if len(addresses) == 0 {
-		return nil, fmt.Errorf("%s resolved to no addresses", subject)
+		return nil, errs.NoAddressesResolved(subject)
 	}
 	for _, address := range addresses {
 		if IsPrivateIP(address.IP) {
-			return nil, ErrPrivateAddressBlocked
+			return nil, errs.ErrPrivateAddressBlocked
 		}
 	}
 	return addresses, nil

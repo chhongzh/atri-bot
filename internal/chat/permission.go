@@ -6,14 +6,15 @@ package chat
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/model"
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/cloudwego/eino/components/tool"
+	pkgErrors "github.com/pkg/errors"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -73,7 +74,7 @@ func (m *Manager) Init() error {
 func (m *Manager) SetToolPermission(ctx context.Context, userID int64, toolName string, allowed bool) error {
 	toolName = strings.TrimSpace(toolName)
 	if !m.tools.HasPermission(toolName) {
-		return fmt.Errorf("%w: %s", toolmanager.ErrToolNotFound, toolName)
+		return errs.ToolNotFound(toolName)
 	}
 	record := model.ToolPermission{UserID: userID, ToolName: toolName, Allowed: allowed}
 	if err := m.db.WithContext(ctx).Save(&record).Error; err != nil {
@@ -91,7 +92,7 @@ func (m *Manager) SetToolPermission(ctx context.Context, userID int64, toolName 
 func (m *Manager) ResetToolPermission(ctx context.Context, userID int64, toolName string) error {
 	toolName = strings.TrimSpace(toolName)
 	if !m.tools.HasPermission(toolName) {
-		return fmt.Errorf("%w: %s", toolmanager.ErrToolNotFound, toolName)
+		return errs.ToolNotFound(toolName)
 	}
 	if err := m.db.WithContext(ctx).
 		Where("user_id = ? AND tool_name = ?", userID, toolName).
@@ -152,7 +153,7 @@ func (m *Manager) allowedTools(ctx context.Context, userID int64) ([]tool.BaseTo
 	for _, t := range all {
 		info, err := t.Info(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("read tool info: %w", err)
+			return nil, pkgErrors.Wrap(err, "read tool info")
 		}
 		name := ""
 		if info != nil {
@@ -160,7 +161,7 @@ func (m *Manager) allowedTools(ctx context.Context, userID int64) ([]tool.BaseTo
 		}
 		permission, exists := m.tools.PermissionName(name)
 		if !exists {
-			return nil, fmt.Errorf("tool %q has no permission mapping", name)
+			return nil, errs.ToolNoPermissionMapping(name)
 		}
 		ok, err := m.ToolAllowed(ctx, userID, permission)
 		if err != nil {

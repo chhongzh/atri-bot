@@ -6,15 +6,15 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/url"
 	"sort"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
 	toolutils "github.com/cloudwego/eino/components/tool/utils"
+	pkgErrors "github.com/pkg/errors"
 	"github.com/tidwall/gjson"
 )
 
@@ -197,7 +197,7 @@ func Register(manager *toolmanager.Manager, mcpManager *mcpmanager.Manager) erro
 				return nil, err
 			}
 			if input.Value == nil {
-				return nil, errors.New("mcp provider value is required")
+				return nil, errs.ErrMCPProviderValueRequired
 			}
 			name, err := requiredProviderName(input.Name)
 			if err != nil {
@@ -245,7 +245,7 @@ func Register(manager *toolmanager.Manager, mcpManager *mcpmanager.Manager) erro
 func requiredProviderName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return "", errors.New("name is required")
+		return "", errs.ErrNameRequired
 	}
 	return name, nil
 }
@@ -256,7 +256,7 @@ func marshalJSONObject(value any) (string, error) {
 	}
 	data, err := json.Marshal(value)
 	if err != nil {
-		return "", fmt.Errorf("marshal mcp provider object: %w", err)
+		return "", pkgErrors.Wrap(err, "marshal mcp provider object")
 	}
 	return string(data), nil
 }

@@ -5,13 +5,13 @@ package character
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/chhongzh/atri-bot/internal/model"
+	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -54,7 +54,7 @@ func (p *LocalProvider) Load(_ context.Context) ([]*model.Character, error) {
 		}
 		definition := make(map[string]any)
 		if unmarshalErr := yaml.Unmarshal(data, &definition); unmarshalErr != nil {
-			return nil, fmt.Errorf("parse character %s: %w", path, unmarshalErr)
+			return nil, errors.Wrapf(unmarshalErr, "parse character %s", path)
 		}
 		id := strings.TrimSuffix(entry.Name(), extension)
 		characters = append(characters, &model.Character{

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/chhongzh/atri-bot/internal/constants"
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
@@ -44,7 +45,7 @@ func (r *Runner) commandAI(c telebot.Context, args []string) {
 		return
 	case "base-url", "key", "model", "rounds", "image-size":
 	default:
-		r.commandError(c, fmt.Errorf("未知 AI 配置项 %q", action))
+		r.commandError(c, errs.UnknownAIItem(action))
 		return
 	}
 
@@ -63,14 +64,14 @@ func (r *Runner) commandAI(c telebot.Context, args []string) {
 	case "rounds":
 		rounds, parseErr := strconv.Atoi(value)
 		if parseErr != nil || rounds <= 0 {
-			err = fmt.Errorf("rounds 必须是正整数")
+			err = errs.ErrInvalidRounds
 		} else {
 			err = r.accounts.SetAIMaxRounds(ctx, sender.ID, rounds)
 		}
 	case "image-size":
 		maxEdge, parseErr := strconv.Atoi(value)
 		if parseErr != nil || maxEdge <= 0 || maxEdge > constants.MaxImageMaxEdge {
-			err = fmt.Errorf("image-size 必须是 1 到 %d 之间的整数", constants.MaxImageMaxEdge)
+			err = errs.InvalidImageSize(constants.MaxImageMaxEdge)
 		} else {
 			err = r.accounts.SetAIImageMaxEdge(ctx, sender.ID, maxEdge)
 		}

@@ -4,37 +4,36 @@
 package mcp
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/security"
+	"github.com/pkg/errors"
 )
 
 // validateProviderURL checks that rawURL is an absolute http(s) URL.
 func validateProviderURL(rawURL string, allowPrivateIP bool) error {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
-		return errors.New("mcp url is required")
+		return errs.ErrMCPURLEmpty
 	}
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
-		return fmt.Errorf("invalid mcp url: %w", err)
+		return errors.Wrap(err, "invalid mcp url")
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return errs.ErrInvalidScheme
 	}
 	if parsed.Hostname() == "" {
-		return errors.New("mcp url host is required")
+		return errs.ErrMCPURLHostRequired
 	}
 	if parsed.User != nil {
-		return errors.New("mcp url must not contain user info")
+		return errs.ErrMCPURLUserInfoForbidden
 	}
 	if parsed.Fragment != "" {
-		return errors.New("mcp url must not contain a fragment")
+		return errs.ErrMCPURLFragmentForbidden
 	}
 	if allowPrivateIP {
 		return nil

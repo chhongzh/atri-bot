@@ -6,21 +6,14 @@ package account
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
 	"github.com/chhongzh/atri-bot/internal/constants"
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/model"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
-)
-
-var (
-	ErrUserNotFound     = errors.New("user not found")
-	ErrPermissionDenied = errors.New("permission denied")
-	ErrLastAdmin        = errors.New("the last administrator cannot be removed")
-	ErrSelfDemotion     = errors.New("administrators cannot demote themselves")
 )
 
 type Manager struct {
@@ -118,14 +111,14 @@ func (m *Manager) Get(ctx context.Context, id int64) (*model.User, error) {
 	var user model.User
 	err := m.db.WithContext(ctx).First(&user, "telegram_id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, ErrUserNotFound
+		return nil, errs.ErrUserNotFound
 	}
 	return &user, err
 }
 
 func (m *Manager) Settings(ctx context.Context, id int64) (configmanager.UserSettings, error) {
 	settings, err := m.configs.QueryUser[configmanager.UserSettings](ctx, id, configmanager.UserSettingsKey)
-	if errors.Is(err, configmanager.ErrNotFound) {
+	if errors.Is(err, errs.ErrConfigNotFound) {
 		return configmanager.UserSettings{AIMaxRounds: m.defaultMaxRounds, AIImageMaxEdge: m.defaultImageMaxEdge}, nil
 	}
 	if settings.AIImageMaxEdge == 0 {
@@ -136,10 +129,10 @@ func (m *Manager) Settings(ctx context.Context, id int64) (configmanager.UserSet
 
 func (m *Manager) SetSettings(ctx context.Context, id int64, settings configmanager.UserSettings) error {
 	if settings.AIMaxRounds <= 0 {
-		return errors.New("AI max rounds must be positive")
+		return errs.ErrInvalidAIMaxRounds
 	}
 	if settings.AIImageMaxEdge <= 0 || settings.AIImageMaxEdge > constants.MaxImageMaxEdge {
-		return fmt.Errorf("AI image max edge must be between 1 and %d", constants.MaxImageMaxEdge)
+		return errs.InvalidAIImageMaxEdge(constants.MaxImageMaxEdge)
 	}
 	if _, err := m.Get(ctx, id); err != nil {
 		return err
@@ -157,10 +150,10 @@ func (m *Manager) IsAdmin(ctx context.Context, id int64) (bool, error) {
 
 func (m *Manager) SetRole(ctx context.Context, actorID, targetID int64, role model.Role) error {
 	if role != model.RoleUser && role != model.RoleAdmin {
-		return fmt.Errorf("invalid role %q", role)
+		return errs.InvalidRole(role)
 	}
 	if actorID == targetID && role != model.RoleAdmin {
-		return ErrSelfDemotion
+		return errs.ErrSelfDemotion
 	}
 
 	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -265,7 +258,7 @@ func (m *Manager) updateSettings(ctx context.Context, id int64, mutate func(*con
 // A value of 0 restores the global default.
 func (m *Manager) SetMCPMaxTools(ctx context.Context, actorID, targetID int64, value int) error {
 	if value < 0 {
-		return errors.New("MCP max tools cannot be negative")
+		return errs.ErrInvalidMCPMaxTools
 	}
 	if err := m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := requireAdmin(tx, actorID); err != nil {
@@ -304,10 +297,10 @@ func (m *Manager) Admins(ctx context.Context) ([]model.User, error) {
 // ListPage returns account identity and status fields for administrator views.
 func (m *Manager) ListPage(ctx context.Context, filter model.UserListFilter, page, pageSize int) (*model.UserPage, error) {
 	if page <= 0 {
-		return nil, errors.New("page must be positive")
+		return nil, errs.ErrPageNotPositive
 	}
 	if pageSize <= 0 {
-		return nil, errors.New("page size must be positive")
+		return nil, errs.ErrPageSizeNotPositive
 	}
 	query := m.db.WithContext(ctx).
 		Model(&model.User{})
@@ -355,12 +348,12 @@ func requireAdmin(tx *gorm.DB, id int64) error {
 	var actor model.User
 	if err := tx.First(&actor, "telegram_id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrUserNotFound
+			return errs.ErrUserNotFound
 		}
 		return err
 	}
 	if actor.Role != model.RoleAdmin || actor.Banned {
-		return ErrPermissionDenied
+		return errs.ErrPermissionDenied
 	}
 	return nil
 }
@@ -369,7 +362,7 @@ func loadTargetUser(tx *gorm.DB, targetID int64) (*model.User, error) {
 	var target model.User
 	if err := tx.First(&target, "telegram_id = ?", targetID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrUserNotFound
+			return nil, errs.ErrUserNotFound
 		}
 		return nil, err
 	}
@@ -385,7 +378,7 @@ func ensureAnotherAdmin(tx *gorm.DB, excludedID int64) error {
 		return err
 	}
 	if count == 0 {
-		return ErrLastAdmin
+		return errs.ErrLastAdmin
 	}
 	return nil
 }

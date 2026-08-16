@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
 )
@@ -26,7 +27,7 @@ func consumeMessageVariant(
 		return message, nil
 	}
 	if variant.MessageStream == nil {
-		return nil, errors.New("streaming message variant has no stream")
+		return nil, errs.ErrStreamingVariantNoStream
 	}
 	defer variant.MessageStream.Close()
 

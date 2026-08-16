@@ -9,13 +9,15 @@ import (
 	"net"
 	"net/http"
 	"testing"
+
+	"github.com/chhongzh/atri-bot/internal/errs"
 )
 
 func TestSafeDialerBlocksInternalHost(t *testing.T) {
 	dialer := NewSafeDialer(&net.Dialer{}, false)
 	_, err := dialer.DialContext(context.Background(), "tcp", "127.0.0.1:80")
-	if !errors.Is(err, ErrPrivateAddressBlocked) {
-		t.Fatalf("DialContext() error = %v, want ErrPrivateAddressBlocked", err)
+	if !errors.Is(err, errs.ErrPrivateAddressBlocked) {
+		t.Fatalf("DialContext() error = %v, want errs.ErrPrivateAddressBlocked", err)
 	}
 }
 
@@ -38,7 +40,7 @@ func TestSafeHTTPTransportChecksTargetBeforeProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = client.Do(request)
-	if !errors.Is(err, ErrPrivateAddressBlocked) {
-		t.Fatalf("client.Do() error = %v, want ErrPrivateAddressBlocked", err)
+	if !errors.Is(err, errs.ErrPrivateAddressBlocked) {
+		t.Fatalf("client.Do() error = %v, want errs.ErrPrivateAddressBlocked", err)
 	}
 }

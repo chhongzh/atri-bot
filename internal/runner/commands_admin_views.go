@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/chhongzh/atri-bot/internal/chat"
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/model"
 	"gopkg.in/telebot.v4"
 )
@@ -188,7 +189,7 @@ func userListRequest(args []string) (model.UserListFilter, string, int, string, 
 		banned := true
 		return model.UserListFilter{Banned: &banned}, "已封禁用户", page, "/users banned", nil
 	default:
-		return model.UserListFilter{}, "", 0, "", fmt.Errorf("用法：%s", usage)
+		return model.UserListFilter{}, "", 0, "", errs.CommandUsage(usage)
 	}
 }
 
@@ -198,7 +199,7 @@ func pageCount(total, pageSize int) int {
 
 func validatePage(page, pages int) error {
 	if page > pages {
-		return fmt.Errorf("页码 %d 超出范围，共 %d 页", page, pages)
+		return errs.PageOutOfRange(page, pages)
 	}
 	return nil
 }

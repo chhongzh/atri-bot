@@ -6,14 +6,13 @@ package character
 import (
 	"context"
 	_ "embed"
-	"errors"
-	"fmt"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/cloudwego/eino/components/prompt"
@@ -155,7 +154,7 @@ func (m *Manager) Default() (*model.Character, bool) {
 func (m *Manager) RenderSystemPrompt(ctx context.Context, id, username string) (string, error) {
 	character, ok := m.Get(id)
 	if !ok {
-		return "", fmt.Errorf("character %q not found", id)
+		return "", errs.CharacterNotFound(id)
 	}
 	definitionYAML, err := yaml.Marshal(character.Definition)
 	if err != nil {
@@ -183,7 +182,7 @@ func renderTemplate(ctx context.Context, template *prompt.DefaultChatTemplate, n
 		return nil, err
 	}
 	if len(messages) != 1 {
-		return nil, fmt.Errorf("%s prompt template returned no message", name)
+		return nil, errs.PromptTemplateNoMessage(name)
 	}
 	return messages[0], nil
 }
@@ -200,7 +199,7 @@ func (m *Manager) Providers(ctx context.Context) ([]model.Provider, error) {
 func (m *Manager) AddRemote(ctx context.Context, id, url, branch string) error {
 	id = strings.TrimSpace(id)
 	if id == "" || id == localProviderID || !providerIDPattern.MatchString(id) || strings.Contains(id, "..") {
-		return errors.New("invalid provider id")
+		return errs.ErrInvalidProviderID
 	}
 	url, err := normalizeRemoteURL(url)
 	if err != nil {
@@ -226,7 +225,7 @@ func (m *Manager) UpdateRemote(ctx context.Context, id, url, branch string) erro
 		return err
 	}
 	if record.Kind != model.ProviderRemote {
-		return errors.New("only remote providers can be updated")
+		return errs.ErrRemoteOnlyUpdate
 	}
 	url, err := normalizeRemoteURL(url)
 	if err != nil {
@@ -249,7 +248,7 @@ func (m *Manager) Remove(ctx context.Context, id string) error {
 		return err
 	}
 	if record.BuiltIn {
-		return errors.New("built-in provider cannot be removed")
+		return errs.ErrBuiltInProviderProtected
 	}
 	if err := m.db.WithContext(ctx).Delete(&record).Error; err != nil {
 		return err
@@ -260,7 +259,7 @@ func (m *Manager) Remove(ctx context.Context, id string) error {
 func normalizeRemoteURL(url string) (string, error) {
 	url = utils.NormalizeGitRepoURL(url)
 	if url == "" {
-		return "", errors.New("remote url cannot be empty")
+		return "", errs.ErrRemoteURLEmpty
 	}
 	return url, nil
 }
@@ -271,10 +270,10 @@ func providerFromRecord(record model.Provider) (Provider, error) {
 		return NewLocalProvider(record.ID, record.Path), nil
 	case model.ProviderRemote:
 		if record.URL == "" {
-			return nil, errors.New("remote url is empty")
+			return nil, errs.ErrRemoteURLEmpty
 		}
 		return NewRemoteProvider(record.ID, record.URL, record.Branch, record.Path), nil
 	default:
-		return nil, fmt.Errorf("unsupported provider kind %q", record.Kind)
+		return nil, errs.UnsupportedProviderKind(string(record.Kind))
 	}
 }

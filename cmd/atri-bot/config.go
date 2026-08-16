@@ -4,12 +4,12 @@
 package main
 
 import (
-	"errors"
-	"fmt"
 	"strings"
 	"time"
 
 	"github.com/chhongzh/atri-bot/internal/constants"
+	"github.com/chhongzh/atri-bot/internal/errs"
+	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
 
@@ -74,12 +74,12 @@ func getConfig() (*Config, error) {
 	v.SetDefault("files.cleanup_after", constants.DefaultFilesCleanupAfter)
 
 	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("read configuration: %w", err)
+		return nil, errors.Wrap(err, "read configuration")
 	}
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, fmt.Errorf("parse configuration: %w", err)
+		return nil, errors.Wrap(err, "parse configuration")
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -90,27 +90,27 @@ func getConfig() (*Config, error) {
 func (c *Config) validate() error {
 	c.Telegram.BotToken = strings.TrimSpace(c.Telegram.BotToken)
 	if c.Telegram.BotToken == "" {
-		return errors.New("required configuration telegram.bot_token is missing")
+		return errs.ErrConfigBotTokenMissing
 	}
 
 	if c.Default.MaxRounds <= 0 {
-		return errors.New("configuration default.max_rounds must be positive")
+		return errs.ErrConfigMaxRoundsInvalid
 	}
 	if c.Default.ImageMaxEdge <= 0 || c.Default.ImageMaxEdge > constants.MaxImageMaxEdge {
-		return fmt.Errorf("configuration default.image_max_edge must be between 1 and %d", constants.MaxImageMaxEdge)
+		return errs.ConfigImageMaxEdgeInvalid(constants.MaxImageMaxEdge)
 	}
 	if c.Default.MCPMaxTools <= 0 {
-		return errors.New("configuration default.mcp_max_tools must be positive")
+		return errs.ErrConfigMCPMaxToolsInvalid
 	}
 	if c.Files.MaxStorageMB <= 0 {
-		return errors.New("configuration files.max_storage_mb must be positive")
+		return errs.ErrConfigFilesMaxStorageInvalid
 	}
 	cleanupAfter, err := parseDuration(c.Files.CleanupAfter)
 	if err != nil {
-		return fmt.Errorf("configuration files.cleanup_after must be a positive duration: %w", err)
+		return errors.Wrap(err, "configuration files.cleanup_after must be a positive duration")
 	}
 	if cleanupAfter <= 0 {
-		return errors.New("configuration files.cleanup_after must be a positive duration")
+		return errs.ErrConfigFilesCleanupAfterInvalid
 	}
 	c.Files.cleanupAfter = cleanupAfter
 
@@ -119,10 +119,10 @@ func (c *Config) validate() error {
 	case "sqlite":
 	case "mysql":
 		if c.Database.DSN == "" {
-			return errors.New("configuration database.dsn is required for database.type=mysql")
+			return errs.ErrConfigMySQLDSNRequired
 		}
 	default:
-		return fmt.Errorf("unsupported database.type %q (supported: sqlite, mysql)", c.Database.Type)
+		return errs.ConfigDatabaseTypeUnsupported(c.Database.Type)
 	}
 
 	c.External.BrowserURL = strings.TrimSpace(c.External.BrowserURL)

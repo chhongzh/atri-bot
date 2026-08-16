@@ -8,26 +8,21 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"reflect"
 	"strings"
 	"sync"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/cloudwego/eino/components/tool"
 	toolutils "github.com/cloudwego/eino/components/tool/utils"
+	pkgErrors "github.com/pkg/errors"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
-)
-
-var (
-	ErrRunningStateMissing = errors.New("tool running state is missing")
-	ErrToolNotFound        = errors.New("tool not found")
-	ErrConfigPathNotFound  = errors.New("tool config path not found")
 )
 
 type ConfiguredFunc[C, I, O any] func(
@@ -91,17 +86,17 @@ func (m *Manager) Register[C, I, O any](
 	name = strings.TrimSpace(name)
 	configType := reflect.TypeOf((*C)(nil)).Elem()
 	if configType.Kind() != reflect.Struct {
-		return fmt.Errorf("tool config %s must be a struct", configType)
+		return errs.ToolConfigNotStruct(configType.String())
 	}
 	defaultJSON, err := json.Marshal(defaultConfig)
 	if err != nil {
-		return fmt.Errorf("marshal default config for %s: %w", name, err)
+		return pkgErrors.Wrapf(err, "marshal default config for %s", name)
 	}
 
 	inferred, err := toolutils.InferTool(name, description, func(ctx context.Context, input *I) (*O, error) {
 		state, ok := RunningStateFromContext(ctx)
 		if !ok {
-			return nil, ErrRunningStateMissing
+			return nil, errs.ErrRunningStateMissing
 		}
 		configValue, loadErr := m.loadConfig(ctx, state.UserID, name, configType, defaultJSON)
 		if loadErr != nil {
@@ -109,7 +104,7 @@ func (m *Manager) Register[C, I, O any](
 		}
 		config, ok := configValue.Interface().(*C)
 		if !ok {
-			return nil, fmt.Errorf("unexpected config type for tool %s", name)
+			return nil, errs.ToolUnexpectedConfigType(name)
 		}
 		return function(ctx, state, config, input)
 	})
@@ -120,13 +115,13 @@ func (m *Manager) Register[C, I, O any](
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, exists := m.registered[name]; exists {
-		return fmt.Errorf("tool %q already registered", name)
+		return errs.ToolAlreadyRegistered(name)
 	}
 	if _, exists := m.builtins[name]; exists {
-		return fmt.Errorf("tool %q already registered as builtin", name)
+		return errs.ToolAlreadyBuiltin(name)
 	}
 	if _, exists := m.virtualPermissions[name]; exists {
-		return fmt.Errorf("tool %q conflicts with a permission-only capability", name)
+		return errs.ToolConflictsWithPermission(name)
 	}
 	m.registered[name] = &registeredTool{
 		tool:          inferred,
@@ -155,28 +150,28 @@ func (m *Manager) registerBuiltin(name, permission string, builtin tool.BaseTool
 	name = strings.TrimSpace(name)
 	info, err := builtin.Info(context.Background())
 	if err != nil {
-		return fmt.Errorf("read builtin tool %q info: %w", name, err)
+		return pkgErrors.Wrapf(err, "read builtin tool %q info", name)
 	}
 	declaredName := info.Name
 	if declaredName != name {
-		return fmt.Errorf("builtin tool name mismatch: registered %q, declared %q", name, declaredName)
+		return errs.BuiltinToolNameMismatch(name, declaredName)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, exists := m.registered[name]; exists {
-		return fmt.Errorf("tool %q already registered as configurable", name)
+		return errs.ToolAlreadyConfigurable(name)
 	}
 	if _, exists := m.builtins[name]; exists {
-		return fmt.Errorf("builtin tool %q already registered", name)
+		return errs.BuiltinToolAlreadyRegistered(name)
 	}
 	if permission == name {
 		if _, exists := m.virtualPermissions[name]; exists {
-			return fmt.Errorf("builtin tool %q conflicts with a permission-only capability", name)
+			return errs.BuiltinToolConflictsWithPermission(name)
 		}
 	}
 	if permission != name {
 		if _, exists := m.virtualPermissions[permission]; !exists {
-			return fmt.Errorf("tool permission %q is not registered", permission)
+			return errs.ToolPermissionNotRegistered(permission)
 		}
 	}
 	m.builtins[name] = builtin
@@ -196,10 +191,10 @@ func (m *Manager) RegisterPermission(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, exists := m.virtualPermissions[name]; exists {
-		return fmt.Errorf("tool permission %q already registered", name)
+		return errs.ToolPermissionAlreadyRegistered(name)
 	}
 	if _, exists := m.permissionByTool[name]; exists {
-		return fmt.Errorf("tool permission %q conflicts with a tool", name)
+		return errs.ToolPermissionConflictsWithTool(name)
 	}
 	m.virtualPermissions[name] = struct{}{}
 	m.permissionOrder = append(m.permissionOrder, name)
@@ -260,7 +255,7 @@ func (m *Manager) SetConfig(ctx context.Context, userID int64, name string, valu
 	registered, ok := m.registered[name]
 	m.mu.RUnlock()
 	if !ok {
-		return fmt.Errorf("%w: %s", ErrToolNotFound, name)
+		return errs.ToolNotFound(name)
 	}
 	normalized, err := validateAndNormalizeConfig(name, registered.configType, value)
 	if err != nil {
@@ -285,7 +280,7 @@ func (m *Manager) ConfigValue(ctx context.Context, userID int64, name, path stri
 	}
 	value := gjson.GetBytes(data, path)
 	if !value.Exists() {
-		return nil, fmt.Errorf("%w: %s.%s", ErrConfigPathNotFound, name, path)
+		return nil, errs.ToolConfigPathNotFound(name, path)
 	}
 	return value.Value(), nil
 }
@@ -300,11 +295,11 @@ func (m *Manager) SetConfigValue(ctx context.Context, userID int64, name, path s
 		return nil, err
 	}
 	if !gjson.GetBytes(data, path).Exists() {
-		return nil, fmt.Errorf("%w: %s.%s", ErrConfigPathNotFound, name, path)
+		return nil, errs.ToolConfigPathNotFound(name, path)
 	}
 	updated, err := sjson.SetBytes(data, path, value)
 	if err != nil {
-		return nil, fmt.Errorf("update config path %s.%s: %w", name, path, err)
+		return nil, pkgErrors.Wrapf(err, "update config path %s.%s", name, path)
 	}
 	if err = m.SetConfig(ctx, userID, name, updated); err != nil {
 		return nil, err
@@ -317,7 +312,7 @@ func (m *Manager) ConfigJSON(ctx context.Context, userID int64, name string) ([]
 	registered, ok := m.registered[name]
 	m.mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrToolNotFound, name)
+		return nil, errs.ToolNotFound(name)
 	}
 	var record model.ToolConfig
 	err := m.db.WithContext(ctx).
@@ -344,7 +339,7 @@ func (m *Manager) loadConfig(
 	defaultConfig []byte,
 ) (reflect.Value, error) {
 	data, err := m.ConfigJSON(ctx, userID, name)
-	if errors.Is(err, ErrToolNotFound) {
+	if errors.Is(err, errs.ErrToolNotFound) {
 		data = defaultConfig
 		err = nil
 	}
@@ -356,27 +351,27 @@ func (m *Manager) loadConfig(
 		return reflect.Value{}, err
 	}
 	if err = json.Unmarshal(data, value.Interface()); err != nil {
-		return reflect.Value{}, fmt.Errorf("decode config for %s: %w", name, err)
+		return reflect.Value{}, pkgErrors.Wrapf(err, "decode config for %s", name)
 	}
 	return value, nil
 }
 
 func validateAndNormalizeConfig(name string, configType reflect.Type, data []byte) ([]byte, error) {
 	if !json.Valid(data) {
-		return nil, fmt.Errorf("invalid config for %s: malformed JSON", name)
+		return nil, errs.ToolInvalidConfigMalformed(name)
 	}
 	value := reflect.New(configType)
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(value.Interface()); err != nil {
-		return nil, fmt.Errorf("invalid config for %s: %w", name, err)
+		return nil, pkgErrors.Wrapf(err, "invalid config for %s", name)
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("invalid config for %s: trailing JSON data", name)
+		return nil, errs.ToolInvalidConfigTrailing(name)
 	}
 	normalized, err := json.Marshal(value.Interface())
 	if err != nil {
-		return nil, fmt.Errorf("normalize config for %s: %w", name, err)
+		return nil, pkgErrors.Wrapf(err, "normalize config for %s", name)
 	}
 	return normalized, nil
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
@@ -31,7 +32,7 @@ func (r *Runner) commandProviders(c telebot.Context, _ []string) {
 func (r *Runner) commandProvider(c telebot.Context, args []string) {
 	action := commandAction(args, "")
 	if action == "" {
-		r.commandError(c, fmt.Errorf("用法：/provider <add|set|remove|refresh>"))
+		r.commandError(c, errs.CommandUsage("/provider <add|set|remove|refresh>"))
 		return
 	}
 	if action == "list" {
@@ -58,7 +59,7 @@ func (r *Runner) commandProvider(c telebot.Context, args []string) {
 	case "refresh":
 		err = r.characters.Reload(ctx)
 	default:
-		err = fmt.Errorf("未知 Provider 操作 %q", action)
+		err = errs.UnknownProviderAction(action)
 	}
 	if err != nil {
 		r.commandError(c, err)

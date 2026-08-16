@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -28,7 +30,7 @@ func main() {
 
 	tempDir, err := os.MkdirTemp("", "atri-webread-stealth-")
 	if err != nil {
-		panic(fmt.Errorf("create temporary directory: %w", err))
+		panic(errors.Wrap(err, "create temporary directory"))
 	}
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
@@ -42,12 +44,12 @@ func main() {
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
 	if err := command.Run(); err != nil {
-		panic(fmt.Errorf("generate stealth script: %w", err))
+		panic(errors.Wrap(err, "generate stealth script"))
 	}
 
 	generated, err := os.ReadFile(filepath.Join(tempDir, outputFile))
 	if err != nil {
-		panic(fmt.Errorf("read generated stealth script: %w", err))
+		panic(errors.Wrap(err, "read generated stealth script"))
 	}
 	generated = generatedOnPattern.ReplaceAll(generated, nil)
 	metadata := fmt.Sprintf(
@@ -64,7 +66,7 @@ func main() {
 	generated = bytes.Replace(generated, []byte(generatedBy), []byte(metadata), 1)
 
 	if err := os.WriteFile(outputFile, generated, 0o644); err != nil {
-		panic(fmt.Errorf("write generated stealth script: %w", err))
+		panic(errors.Wrap(err, "write generated stealth script"))
 	}
 }
 
@@ -72,7 +74,7 @@ func resolvePackageVersion(name string) string {
 	command := exec.Command("npm", "view", name+"@latest", "version")
 	output, err := command.CombinedOutput()
 	if err != nil {
-		panic(fmt.Errorf("resolve %s version: %w: %s", name, err, strings.TrimSpace(string(output))))
+		panic(errors.Wrapf(err, "resolve %s version: %s", name, strings.TrimSpace(string(output))))
 	}
 
 	version := strings.TrimSpace(string(output))

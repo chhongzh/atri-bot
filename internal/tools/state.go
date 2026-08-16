@@ -6,6 +6,7 @@ package tools
 import (
 	"context"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"gopkg.in/telebot.v4"
 )
 
@@ -27,11 +28,11 @@ func RunningStateFromContext(ctx context.Context) (*RunningState, bool) {
 }
 
 // RequireRunningState returns the running state from ctx,
-// or ErrRunningStateMissing when it is absent.
+// or errs.ErrRunningStateMissing when it is absent.
 func RequireRunningState(ctx context.Context) (*RunningState, error) {
 	state, ok := RunningStateFromContext(ctx)
 	if !ok {
-		return nil, ErrRunningStateMissing
+		return nil, errs.ErrRunningStateMissing
 	}
 	return state, nil
 }

@@ -4,10 +4,10 @@
 package runner
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
@@ -59,7 +59,7 @@ func commandAction(args []string, defaultAction string) string {
 
 func requireArgs(args []string, count int, usage string) error {
 	if len(args) < count {
-		return fmt.Errorf("用法：%s", usage)
+		return errs.CommandUsage(usage)
 	}
 	return nil
 }
@@ -70,7 +70,7 @@ func parseUserID(args []string, index int, usage string) (int64, error) {
 	}
 	userID, err := strconv.ParseInt(strings.TrimSpace(args[index]), 10, 64)
 	if err != nil || userID <= 0 {
-		return 0, fmt.Errorf("用户 ID 必须是正整数")
+		return 0, errs.ErrInvalidUserID
 	}
 	return userID, nil
 }
@@ -80,11 +80,11 @@ func parseOptionalPage(args []string, index int, usage string) (int, error) {
 		return 1, nil
 	}
 	if len(args) != index+1 {
-		return 0, fmt.Errorf("用法：%s", usage)
+		return 0, errs.CommandUsage(usage)
 	}
 	page, err := strconv.Atoi(strings.TrimSpace(args[index]))
 	if err != nil || page <= 0 {
-		return 0, fmt.Errorf("页码必须是正整数")
+		return 0, errs.ErrInvalidPage
 	}
 	return page, nil
 }
@@ -95,7 +95,7 @@ func requiredValue(args []string, index int, usage string) (string, error) {
 	}
 	value := strings.TrimSpace(strings.Join(args[index:], " "))
 	if value == "" {
-		return "", fmt.Errorf("用法：%s", usage)
+		return "", errs.CommandUsage(usage)
 	}
 	return value, nil
 }

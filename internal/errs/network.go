@@ -3,13 +3,9 @@
 
 package errs
 
-import (
-	"errors"
-
-	"github.com/chhongzh/atri-bot/internal/security"
-)
+import "errors"
 
 var (
-	ErrInternalHostBlocked = security.ErrPrivateAddressBlocked
+	ErrInternalHostBlocked = ErrPrivateAddressBlocked
 	ErrInvalidScheme       = errors.New("mcp url scheme must be http or https")
 )

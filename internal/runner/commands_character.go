@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
@@ -60,7 +61,7 @@ func (r *Runner) commandCharacter(c telebot.Context, args []string) {
 
 	characterID := strings.TrimSpace(args[0])
 	if _, ok := r.characters.Get(characterID); !ok {
-		r.commandError(c, fmt.Errorf("角色 %q 不存在", characterID))
+		r.commandError(c, errs.CharacterNotFound(characterID))
 		return
 	}
 	if err := r.accounts.SetCharacter(ctx, sender.ID, characterID); err != nil {

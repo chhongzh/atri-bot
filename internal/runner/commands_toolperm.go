@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
@@ -24,13 +25,13 @@ func (r *Runner) registerToolPermCommands() error {
 func (r *Runner) commandToolPerm(c telebot.Context, args []string) {
 	action := commandAction(args, "")
 	if action == "" {
-		r.commandError(c, fmt.Errorf("用法：/toolperm <list|allow|deny|reset> <user-id> [tool-name]"))
+		r.commandError(c, errs.CommandUsage("/toolperm <list|allow|deny|reset> <user-id> [tool-name]"))
 		return
 	}
 	switch action {
 	case "list", "allow", "deny", "reset":
 	default:
-		r.commandError(c, fmt.Errorf("未知工具权限操作 %q", action))
+		r.commandError(c, errs.UnknownToolPermAction(action))
 		return
 	}
 	targetID, err := parseUserID(args, 1, "/toolperm "+action+" <user-id> [tool-name]")
@@ -49,7 +50,7 @@ func (r *Runner) commandToolPerm(c telebot.Context, args []string) {
 	}
 	toolName := strings.TrimSpace(args[2])
 	if toolName == "" {
-		r.commandError(c, fmt.Errorf("工具名不能为空"))
+		r.commandError(c, errs.ErrEmptyToolName)
 		return
 	}
 	switch action {

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"go.uber.org/zap"
@@ -49,7 +50,7 @@ func (r *Runner) commandAdmin(c telebot.Context, args []string) {
 		return
 	case "promote", "demote", "ban", "unban", "delete":
 	default:
-		r.commandError(c, fmt.Errorf("未知管理员操作 %q", action))
+		r.commandError(c, errs.UnknownAdminAction(action))
 		return
 	}
 
@@ -96,6 +97,6 @@ func (r *Runner) changeAccount(ctx context.Context, actorID, targetID int64, act
 	case "delete":
 		return r.accounts.Delete(ctx, actorID, targetID)
 	default:
-		return fmt.Errorf("未知管理员操作 %q", action)
+		return errs.UnknownAdminAction(action)
 	}
 }

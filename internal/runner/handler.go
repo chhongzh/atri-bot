@@ -15,6 +15,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/errs"
 	filesmanager "github.com/chhongzh/atri-bot/internal/files"
 	"github.com/chhongzh/atri-bot/internal/utils"
+	pkgErrors "github.com/pkg/errors"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 )
@@ -164,15 +165,15 @@ func (r *Runner) handlerForMedia(c telebot.Context) error {
 	}
 	return r.handleChatRequest(c, receivedAt, mediaChatAction(kind), func(ctx context.Context) error {
 		if file.FileSize > constants.MaxUploadFileBytes {
-			return fmt.Errorf("媒体文件不能超过 %d MB", constants.MaxUploadFileBytes>>20)
+			return errs.FileTooLarge(constants.MaxUploadFileBytes >> 20)
 		}
 		body, fileErr := c.Bot().File(file)
 		if fileErr != nil {
-			return fmt.Errorf("从 Telegram 读取媒体: %w", fileErr)
+			return pkgErrors.Wrap(fileErr, "read media from telegram")
 		}
 		ref, saveErr := r.files.Save(ctx, kind, name, settings.AIImageMaxEdge, body, file.FileSize)
 		if saveErr != nil {
-			return fmt.Errorf("保存媒体: %w", saveErr)
+			return pkgErrors.Wrap(saveErr, "save media")
 		}
 		return r.chats.ChatMedia(ctx, c, caption, []filesmanager.Ref{ref}, receivedAt)
 	})
@@ -225,7 +226,7 @@ func telegramMedia(message *telebot.Message) (kind string, file *telebot.File, n
 
 func (r *Runner) handlerForError(err error, c telebot.Context) {
 	if err == nil {
-		err = errors.New("未知错误")
+		err = errs.ErrUnknownError
 	}
 	fields := []zap.Field{zap.Error(err)}
 	if c == nil || c.Sender() == nil {

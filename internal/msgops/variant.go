@@ -17,7 +17,7 @@
 package msgops
 
 import (
-	"fmt"
+	"github.com/chhongzh/atri-bot/internal/errs"
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
@@ -29,7 +29,7 @@ import (
 func ConcatChunks[M adk.MessageType](chunks []M) (M, error) {
 	var zero M
 	if len(chunks) == 0 {
-		return zero, fmt.Errorf("no chunks to concat")
+		return zero, errs.ErrNoChunksToConcat
 	}
 	if len(chunks) == 1 {
 		return chunks[0], nil
@@ -40,7 +40,7 @@ func ConcatChunks[M adk.MessageType](chunks []M) (M, error) {
 		for _, chunk := range chunks {
 			msg, ok := any(chunk).(*schema.AgenticMessage)
 			if !ok || msg == nil {
-				return zero, fmt.Errorf("unexpected agentic chunk type %T", chunk)
+				return zero, errs.UnexpectedAgenticChunkType(chunk)
 			}
 			msgs = append(msgs, msg)
 		}
@@ -55,7 +55,7 @@ func ConcatChunks[M adk.MessageType](chunks []M) (M, error) {
 	for _, chunk := range chunks {
 		msg, ok := any(chunk).(*schema.Message)
 		if !ok || msg == nil {
-			return zero, fmt.Errorf("unexpected message chunk type %T", chunk)
+			return zero, errs.UnexpectedMessageChunkType(chunk)
 		}
 		msgs = append(msgs, msg)
 	}

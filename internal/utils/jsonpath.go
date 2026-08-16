@@ -4,9 +4,10 @@
 package utils
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/chhongzh/atri-bot/internal/errs"
 )
 
 var jsonPathPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*(?:\.(?:[A-Za-z_][A-Za-z0-9_-]*|[0-9]+))*$`)
@@ -17,13 +18,13 @@ var jsonPathPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*(?:\.(?:[A-Za-
 func ValidateJSONPath(path, subject string, maxBytes int) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return "", fmt.Errorf("%s is required", subject)
+		return "", errs.JSONPathRequired(subject)
 	}
 	if !jsonPathPattern.MatchString(path) {
-		return "", fmt.Errorf("invalid %s %q", subject, path)
+		return "", errs.JSONPathInvalid(subject, path)
 	}
 	if maxBytes > 0 && len(path) > maxBytes {
-		return "", fmt.Errorf("%s exceeds %d bytes", subject, maxBytes)
+		return "", errs.JSONPathTooLong(subject, maxBytes)
 	}
 	return path, nil
 }

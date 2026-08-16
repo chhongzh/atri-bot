@@ -5,9 +5,9 @@ package command
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/shlex"
 	"github.com/elliotchance/orderedmap"
 	"gopkg.in/telebot.v4"
@@ -67,7 +67,7 @@ func (m *Manager) sendResult(c telebot.Context, result string) error {
 func (m *Manager) RegisterProvider(name, description string, adminOnly bool) error {
 	name = strings.TrimSpace(name)
 	if _, exists := m.providers.Get(name); exists {
-		return fmt.Errorf("command provider %q already exists", name)
+		return errs.CommandProviderExists(name)
 	}
 	m.providers.Set(name, &Provider{
 		Name:        name,
@@ -81,11 +81,11 @@ func (m *Manager) RegisterProvider(name, description string, adminOnly bool) err
 func (m *Manager) Register(providerName, description, command, usage string, handler Handler) error {
 	providerValue, ok := m.providers.Get(providerName)
 	if !ok {
-		return fmt.Errorf("command provider %q not found", providerName)
+		return errs.CommandProviderNotFound(providerName)
 	}
 	command = strings.TrimPrefix(strings.TrimSpace(command), "/")
 	if _, exists := m.commands[command]; exists {
-		return fmt.Errorf("command %q already registered", command)
+		return errs.CommandAlreadyRegistered(command)
 	}
 	provider := providerValue.(*Provider)
 	registered := &Command{

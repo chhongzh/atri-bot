@@ -6,9 +6,9 @@ package runner
 import (
 	"context"
 	_ "embed"
-	"fmt"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/cloudwego/eino/components/prompt"
 	"github.com/cloudwego/eino/schema"
@@ -80,7 +80,7 @@ func renderAdminMessage(ctx context.Context, message adminMessage) (string, erro
 		return "", err
 	}
 	if len(messages) != 1 {
-		return "", fmt.Errorf("administrator notification template returned %d messages", len(messages))
+		return "", errs.AdminTemplateMessageCount(len(messages))
 	}
 	return strings.TrimSpace(messages[0].Content), nil
 }

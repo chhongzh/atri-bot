@@ -5,10 +5,10 @@ package config
 
 import (
 	"context"
-	"errors"
 	"sort"
 	"strings"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
 	toolutils "github.com/cloudwego/eino/components/tool/utils"
 )
@@ -88,7 +88,7 @@ func Register(manager *toolmanager.Manager) error {
 				return nil, err
 			}
 			if input.Value == nil {
-				return nil, errors.New("tool config value is required")
+				return nil, errs.ErrToolConfigValueRequired
 			}
 			toolName, err := requiredToolName(input.ToolName)
 			if err != nil {
@@ -117,7 +117,7 @@ func Register(manager *toolmanager.Manager) error {
 func requiredToolName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return "", errors.New("tool_name is required")
+		return "", errs.ErrToolNameRequired
 	}
 	return name, nil
 }

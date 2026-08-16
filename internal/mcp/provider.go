@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/mark3labs/mcp-go/mcp"
+	pkgErrors "github.com/pkg/errors"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 	"go.uber.org/zap"
@@ -56,11 +56,11 @@ func (m *Manager) Add(ctx context.Context, userID int64, name, rawURL, meta, hea
 	var err error
 	name = strings.TrimSpace(name)
 	if len(name) > maxProviderNameBytes {
-		return nil, fmt.Errorf("mcp provider name exceeds %d bytes", maxProviderNameBytes)
+		return nil, errs.MCPProviderNameTooLong(maxProviderNameBytes)
 	}
 	rawURL = strings.TrimSpace(rawURL)
 	if len(rawURL) > maxProviderURLBytes {
-		return nil, fmt.Errorf("mcp url exceeds %d bytes", maxProviderURLBytes)
+		return nil, errs.MCPURLTooLong(maxProviderURLBytes)
 	}
 	if err := validateProviderURL(rawURL, m.allowPrivateIP); err != nil {
 		return nil, err
@@ -88,13 +88,13 @@ func (m *Manager) Add(ctx context.Context, userID int64, name, rawURL, meta, hea
 		return nil, err
 	}
 	if count >= maxTools {
-		return nil, fmt.Errorf("%w: %d", errs.ErrProviderLimit, maxTools)
+		return nil, errs.MCPProviderLimit(maxTools)
 	}
 
 	provider := &model.MCPProvider{UserID: userID, Name: name, URL: rawURL, Meta: meta, Header: header}
 	if err = m.db.WithContext(ctx).Create(provider).Error; err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
-			return nil, fmt.Errorf("%w: %s", errs.ErrProviderExists, name)
+			return nil, errs.MCPProviderExists(name)
 		}
 		return nil, err
 	}
@@ -140,7 +140,7 @@ func (m *Manager) Value(ctx context.Context, userID int64, name, path string) (a
 	}
 	value := gjson.GetBytes(data, path)
 	if !value.Exists() {
-		return nil, fmt.Errorf("%w: %s.%s", errs.ErrPathNotFound, name, path)
+		return nil, errs.MCPPathNotFound(name, path)
 	}
 	return value.Value(), nil
 }
@@ -151,7 +151,7 @@ func (m *Manager) SetValue(ctx context.Context, userID int64, name, path string,
 		return nil, err
 	}
 	if top := providerTopLevel(path); top != "url" && top != "meta" && top != "header" {
-		return nil, fmt.Errorf("%w: %s", errs.ErrPathForbidden, top)
+		return nil, errs.MCPPathForbidden(top)
 	}
 	provider, err := m.Get(ctx, userID, name)
 	if err != nil {
@@ -162,11 +162,11 @@ func (m *Manager) SetValue(ctx context.Context, userID int64, name, path string,
 		return nil, err
 	}
 	if top := providerTopLevel(path); top == "url" && !gjson.GetBytes(data, path).Exists() {
-		return nil, fmt.Errorf("%w: %s.%s", errs.ErrPathNotFound, name, path)
+		return nil, errs.MCPPathNotFound(name, path)
 	}
 	updated, err := sjson.SetBytes(data, path, value)
 	if err != nil {
-		return nil, fmt.Errorf("update mcp provider %s.%s: %w", name, path, err)
+		return nil, pkgErrors.Wrapf(err, "update mcp provider %s.%s", name, path)
 	}
 	decoded, err := decodeProviderJSON(updated)
 	if err != nil {
@@ -237,7 +237,7 @@ type providerDocument struct {
 func decodeProviderJSON(data []byte) (*providerDocument, error) {
 	var document providerDocument
 	if err := json.Unmarshal(data, &document); err != nil {
-		return nil, fmt.Errorf("decode mcp provider: %w", err)
+		return nil, pkgErrors.Wrap(err, "decode mcp provider")
 	}
 	if _, err := normalizeJSONObject(string(document.Meta), "meta"); err != nil {
 		return nil, err
@@ -254,14 +254,14 @@ func normalizeJSONObject(raw, field string) (string, error) {
 		return "{}", nil
 	}
 	if len(raw) > maxProviderJSONBytes {
-		return "", fmt.Errorf("%w: %s exceeds %d bytes", errs.ErrInvalidJSON, field, maxProviderJSONBytes)
+		return "", errs.MCPInvalidJSONTooLarge(field, maxProviderJSONBytes)
 	}
 	if !json.Valid([]byte(raw)) || !gjson.Parse(raw).IsObject() {
-		return "", fmt.Errorf("%w: %s must be a JSON object", errs.ErrInvalidJSON, field)
+		return "", errs.MCPInvalidJSONNotObject(field)
 	}
 	var compact bytes.Buffer
 	if err := json.Compact(&compact, []byte(raw)); err != nil {
-		return "", fmt.Errorf("%w: %s must be valid JSON", errs.ErrInvalidJSON, field)
+		return "", errs.MCPInvalidJSONNotValid(field)
 	}
 	return compact.String(), nil
 }
@@ -273,11 +273,11 @@ func parseStringMap(raw, field string) (map[string]string, error) {
 	}
 	result := make(map[string]string)
 	if err = json.Unmarshal([]byte(normalized), &result); err != nil {
-		return nil, fmt.Errorf("%w: %s values must be strings", errs.ErrInvalidJSON, field)
+		return nil, errs.MCPInvalidJSONNotStringMap(field)
 	}
 	for key, value := range result {
 		if !headerNamePattern.MatchString(key) || strings.ContainsAny(value, "\r\n") {
-			return nil, fmt.Errorf("%w: %s contains an invalid HTTP header", errs.ErrInvalidJSON, field)
+			return nil, errs.MCPInvalidJSONInvalidHeader(field)
 		}
 	}
 	return result, nil
@@ -293,7 +293,7 @@ func parseMeta(raw string) (*mcp.Meta, error) {
 	}
 	var meta mcp.Meta
 	if err = json.Unmarshal([]byte(normalized), &meta); err != nil {
-		return nil, fmt.Errorf("%w: meta: %v", errs.ErrInvalidJSON, err)
+		return nil, errors.Join(errs.ErrInvalidJSON, err)
 	}
 	return &meta, nil
 }

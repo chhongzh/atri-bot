@@ -31,12 +31,11 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
+	pkgErrors "github.com/pkg/errors"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 	"gorm.io/gorm"
 )
-
-var errInterruptedOutputPersistence = errors.New("failed to persist interrupted chat output")
 
 type Config struct {
 	StateTTL          time.Duration
@@ -182,7 +181,7 @@ func (m *Manager) chat(ctx context.Context, c telebot.Context, text string, file
 				adk.WithSkipCheckpoint(),
 			)
 			oldResult := oldLoop.Wait()
-			if errors.Is(oldResult.ExitReason, errInterruptedOutputPersistence) {
+			if errors.Is(oldResult.ExitReason, errs.ErrInterruptedOutputPersistence) {
 				state.loopMu.Unlock()
 				return oldResult.ExitReason
 			}
@@ -280,7 +279,7 @@ func (m *Manager) appendPreparedUserRequest(ctx context.Context, state *UserStat
 	state.roundMu.Lock()
 	defer state.roundMu.Unlock()
 	if state.activeRoundID != request.RoundID || state.roundRevision != request.Revision {
-		return fmt.Errorf("chat round changed while appending interrupted user message")
+		return errs.ErrChatRoundChanged
 	}
 	return m.sessions.AppendUser(ctx, state.UserID, state.CharacterID, request.RoundID, request.message())
 }
@@ -486,7 +485,7 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 			return nil, err
 		}
 	} else if _, ok := m.characters.Get(characterID); !ok {
-		return nil, fmt.Errorf("selected character %q is unavailable", characterID)
+		return nil, errs.CharacterUnavailable(characterID)
 	}
 
 	missing := make([]string, 0, 3)
@@ -500,7 +499,7 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 		missing = append(missing, "model")
 	}
 	if len(missing) > 0 {
-		return nil, fmt.Errorf("%w: missing %s", errs.ErrAIConfigIncomplete, strings.Join(missing, ", "))
+		return nil, errs.AIConfigIncomplete(missing)
 	}
 	chatModel, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
 		BaseURL: strings.TrimSpace(settings.AIBaseURL),
@@ -606,7 +605,7 @@ func buildAgentWithTools(
 	if len(mcpTools) > 0 {
 		search, searchErr := toolsearch.New(ctx, &toolsearch.Config{DynamicTools: mcpTools})
 		if searchErr != nil {
-			return nil, fmt.Errorf("create MCP tool search: %w", searchErr)
+			return nil, pkgErrors.Wrap(searchErr, "create MCP tool search")
 		}
 		handlers = append([]adk.ChatModelAgentMiddleware{search}, handlers...)
 	}
@@ -640,7 +639,7 @@ func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Reque
 	)
 	for _, item := range items {
 		if item.RoundID != roundID {
-			err := fmt.Errorf("turn contains requests from different session rounds")
+			err := errs.ErrTurnMixedSessionRounds
 			m.logger.Warn("chat turn input preparation failed",
 				append(fields,
 					zap.String("stage", "validate_rounds"),
@@ -1011,7 +1010,7 @@ func (m *Manager) onAgentEvents(
 		persistErr := m.persistStoppedOutput(state, latest.RoundID, outputs)
 		persistenceDuration += time.Since(persistStartedAt)
 		if persistErr != nil {
-			persistErr = fmt.Errorf("%w: %v", errInterruptedOutputPersistence, persistErr)
+			persistErr = errors.Join(errs.ErrInterruptedOutputPersistence, persistErr)
 			outcome = "stop_persistence_error"
 			completeRequests(turn.Consumed, persistErr)
 			return persistErr
@@ -1051,7 +1050,7 @@ func (m *Manager) onAgentEvents(
 		cancelPersist()
 		persistenceDuration += time.Since(persistStartedAt)
 		if err != nil {
-			err = fmt.Errorf("%w: %v", errInterruptedOutputPersistence, err)
+			err = errors.Join(errs.ErrInterruptedOutputPersistence, err)
 			outcome = "preempt_persistence_error"
 			completeRequests(turn.Consumed, err)
 			return err
@@ -1114,7 +1113,7 @@ func (m *Manager) onAgentEvents(
 		completionDuration += time.Since(completionStartedAt)
 		persistenceDuration += completionDuration
 		if err != nil {
-			err = fmt.Errorf("%w: %v", errInterruptedOutputPersistence, err)
+			err = errors.Join(errs.ErrInterruptedOutputPersistence, err)
 			outcome = "superseded_persistence_error"
 			completeRequests(turn.Consumed, err)
 			return err

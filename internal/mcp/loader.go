@@ -6,7 +6,6 @@ package mcp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"sync"
@@ -18,6 +17,7 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	mcpprotocol "github.com/mark3labs/mcp-go/mcp"
+	pkgErrors "github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -183,7 +183,10 @@ func (m *Manager) loadProvider(
 		},
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("streamable http: %v; legacy sse: %w", streamableErr, err)
+		return nil, nil, errors.Join(
+			pkgErrors.Wrap(streamableErr, "streamable http"),
+			pkgErrors.Wrap(err, "legacy sse"),
+		)
 	}
 	return loaded, closeFn, nil
 }
@@ -202,12 +205,12 @@ func (m *Manager) loadProviderWithTransport(
 	mcpClient, err := newClient(httpClient)
 	if err != nil {
 		closeHTTPClient()
-		return nil, nil, fmt.Errorf("create %s mcp client: %w", transportName, err)
+		return nil, nil, pkgErrors.Wrapf(err, "create %s mcp client", transportName)
 	}
 	if err = mcpClient.Start(ctx); err != nil {
 		_ = mcpClient.Close()
 		closeHTTPClient()
-		return nil, nil, fmt.Errorf("start %s mcp client: %w", transportName, err)
+		return nil, nil, pkgErrors.Wrapf(err, "start %s mcp client", transportName)
 	}
 	initRequest := mcpprotocol.InitializeRequest{}
 	initRequest.Params.ProtocolVersion = mcpprotocol.LATEST_PROTOCOL_VERSION
@@ -215,7 +218,7 @@ func (m *Manager) loadProviderWithTransport(
 	if _, err = mcpClient.Initialize(connectCtx, initRequest); err != nil {
 		_ = mcpClient.Close()
 		closeHTTPClient()
-		return nil, nil, fmt.Errorf("initialize %s mcp client: %w", transportName, err)
+		return nil, nil, pkgErrors.Wrapf(err, "initialize %s mcp client", transportName)
 	}
 	rawTools, err := einomcp.GetTools(connectCtx, &einomcp.Config{
 		Cli:           mcpClient,
@@ -225,7 +228,7 @@ func (m *Manager) loadProviderWithTransport(
 	if err != nil {
 		_ = mcpClient.Close()
 		closeHTTPClient()
-		return nil, nil, fmt.Errorf("list %s mcp tools: %w", transportName, err)
+		return nil, nil, pkgErrors.Wrapf(err, "list %s mcp tools", transportName)
 	}
 
 	audited := make([]tool.BaseTool, 0, len(rawTools))

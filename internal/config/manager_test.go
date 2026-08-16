@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
@@ -45,8 +46,8 @@ func TestQueryRoundTripsJSONValues(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(values, []string{"1", "2", "3"}) {
 		t.Fatalf("user strings = %#v, %v", values, err)
 	}
-	if _, err = manager.QueryUser[string](ctx, 8, "strings"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("isolated query error = %v, want ErrNotFound", err)
+	if _, err = manager.QueryUser[string](ctx, 8, "strings"); !errors.Is(err, errs.ErrConfigNotFound) {
+		t.Fatalf("isolated query error = %v, want errs.ErrConfigNotFound", err)
 	}
 }
 
