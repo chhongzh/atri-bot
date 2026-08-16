@@ -7,7 +7,7 @@ package constants
 import "time"
 
 const (
-	DefaultMaxRounds               = 36
+	DefaultMaxRounds               = 12
 	DefaultImageMaxEdge            = 1024
 	MaxImageMaxEdge                = 2048
 	DefaultMCPMaxTools             = 128

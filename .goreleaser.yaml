@@ -73,6 +73,22 @@ archives:
     formats: [ binary ]
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
 
+dockers_v2:
+  - id: linux
+    ids: [ desktop ]
+    dockerfile: Dockerfile
+    images:
+      - "ghcr.io/chhongzh/atri-bot"
+    tags:
+      - "{{ .Tag }}"
+      - "latest"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    build_args:
+      TZ: "{{ .Env.TZ }}"
+    disable: "{{ .IsSnapshot }}"
+
 changelog:
   sort: asc
   filters:
