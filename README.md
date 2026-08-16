@@ -12,11 +12,7 @@
 
   <p align="center"><small>角色为 ATRI，截图出自《ATRI -My Dear Moments-》E6 10:21</small></p>
 
-  <h3 align="center">atri-bot</h3>
-
   <p align="center">
-    把二次元角色带到现实，让 Ta 真正做事
-    <br />
     <a href="#快速开始">快速开始</a>
     &middot;
     <a href="https://github.com/chhongzh/atri-bot/issues">报告问题</a>
