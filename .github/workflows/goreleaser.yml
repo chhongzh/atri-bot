@@ -89,7 +89,6 @@ jobs:
           args: >-
             release --clean
             ${{ (github.event_name == 'push' || github.event_name == 'pull_request') && '--snapshot' || '' }}
-            ${{ (github.event_name == 'push' || github.event_name == 'pull_request') && '--skip=docker' || '' }}
             ${{ inputs.draft && '--draft' || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

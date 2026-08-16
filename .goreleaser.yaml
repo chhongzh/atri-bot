@@ -73,41 +73,21 @@ archives:
     formats: [ binary ]
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
 
-dockers:
-  - id: linux-amd64
-    ids: [ desktop ]
-    goos: linux
-    goarch: amd64
-    dockerfile: Dockerfile
-    image_templates:
-      - "ghcr.io/chhongzh/atri-bot:{{ .Tag }}-amd64"
-    use: buildx
-    build_flag_templates:
-      - "--build-arg=TZ={{ .Env.TZ }}"
-
-  - id: linux-arm64
-    ids: [ desktop ]
-    goos: linux
-    goarch: arm64
-    dockerfile: Dockerfile
-    image_templates:
-      - "ghcr.io/chhongzh/atri-bot:{{ .Tag }}-arm64"
-    use: buildx
-    build_flag_templates:
-      - "--build-arg=TZ={{ .Env.TZ }}"
-
-docker_manifests:
+dockers_v2:
   - id: linux
-    name_template: "ghcr.io/chhongzh/atri-bot:{{ .Tag }}"
-    image_templates:
-      - "ghcr.io/chhongzh/atri-bot:{{ .Tag }}-amd64"
-      - "ghcr.io/chhongzh/atri-bot:{{ .Tag }}-arm64"
-
-  - id: linux-latest
-    name_template: "ghcr.io/chhongzh/atri-bot:latest"
-    image_templates:
-      - "ghcr.io/chhongzh/atri-bot:{{ .Tag }}-amd64"
-      - "ghcr.io/chhongzh/atri-bot:{{ .Tag }}-arm64"
+    ids: [ desktop ]
+    dockerfile: Dockerfile
+    images:
+      - "ghcr.io/chhongzh/atri-bot"
+    tags:
+      - "{{ .Tag }}"
+      - "latest"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    build_args:
+      TZ: "{{ .Env.TZ }}"
+    disable: "{{ .IsSnapshot }}"
 
 changelog:
   sort: asc
