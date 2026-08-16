@@ -4,7 +4,6 @@
 package utils
 
 import (
-	"strings"
 	"unicode/utf8"
 
 	"go.uber.org/zap"
@@ -41,9 +40,6 @@ func ExpandTelebotContext(c telebot.Context) []zap.Field {
 	}
 	if message := c.Message(); message != nil {
 		fields = append(fields, zap.Int("message_id", message.ID))
-		if text := strings.TrimSpace(message.Text); text != "" {
-			fields = append(fields, zap.String("text", telebotTextPreview(text)))
-		}
 	}
 	return fields
 }
