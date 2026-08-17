@@ -53,7 +53,13 @@ func query[T any](ctx context.Context, manager *Manager, scope string, userID in
 		return zero, err
 	}
 	var record model.Config
-	err = manager.db.WithContext(ctx).First(&record, "scope = ? AND user_id = ? AND key = ?", scope, userID, key).Error
+	err = manager.db.WithContext(ctx).
+		Where(map[string]any{
+			"scope":  scope,
+			"user_id": userID,
+			"key":    key,
+		}).
+		First(&record).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return zero, errs.ConfigNotFound(key)
 	}

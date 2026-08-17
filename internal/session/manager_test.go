@@ -71,7 +71,7 @@ func TestSessionV2StoresOneMessagePerRow(t *testing.T) {
 		}
 	}
 	var round model.SessionRound
-	if err = db.First(&round, roundID).Error; err != nil {
+	if err = db.Where("id = ?", roundID).First(&round).Error; err != nil {
 		t.Fatal(err)
 	}
 	if !round.Completed || round.Interrupted {

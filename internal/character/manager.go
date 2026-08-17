@@ -221,7 +221,7 @@ func (m *Manager) AddRemote(ctx context.Context, id, url, branch string) error {
 
 func (m *Manager) UpdateRemote(ctx context.Context, id, url, branch string) error {
 	var record model.Provider
-	if err := m.db.WithContext(ctx).First(&record, "id = ?", id).Error; err != nil {
+	if err := m.db.WithContext(ctx).Where("id = ?", id).First(&record).Error; err != nil {
 		return err
 	}
 	if record.Kind != model.ProviderRemote {
@@ -244,7 +244,7 @@ func (m *Manager) UpdateRemote(ctx context.Context, id, url, branch string) erro
 
 func (m *Manager) Remove(ctx context.Context, id string) error {
 	var record model.Provider
-	if err := m.db.WithContext(ctx).First(&record, "id = ?", id).Error; err != nil {
+	if err := m.db.WithContext(ctx).Where("id = ?", id).First(&record).Error; err != nil {
 		return err
 	}
 	if record.BuiltIn {

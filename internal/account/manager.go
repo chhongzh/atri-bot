@@ -51,7 +51,7 @@ func (m *Manager) EnsureUser(ctx context.Context, id int64, username, displayNam
 	defer m.createMu.Unlock()
 
 	var user model.User
-	err := m.db.WithContext(ctx).First(&user, "telegram_id = ?", id).Error
+	err := m.db.WithContext(ctx).Where("telegram_id = ?", id).First(&user).Error
 	if err == nil {
 		updates := map[string]any{}
 		if user.Username != username {
@@ -109,7 +109,7 @@ func (m *Manager) EnsureUser(ctx context.Context, id int64, username, displayNam
 
 func (m *Manager) Get(ctx context.Context, id int64) (*model.User, error) {
 	var user model.User
-	err := m.db.WithContext(ctx).First(&user, "telegram_id = ?", id).Error
+	err := m.db.WithContext(ctx).Where("telegram_id = ?", id).First(&user).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, errs.ErrUserNotFound
 	}
@@ -346,7 +346,7 @@ func (m *Manager) Stats(ctx context.Context) (*model.Stats, error) {
 
 func requireAdmin(tx *gorm.DB, id int64) error {
 	var actor model.User
-	if err := tx.First(&actor, "telegram_id = ?", id).Error; err != nil {
+	if err := tx.Where("telegram_id = ?", id).First(&actor).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errs.ErrUserNotFound
 		}
@@ -360,7 +360,7 @@ func requireAdmin(tx *gorm.DB, id int64) error {
 
 func loadTargetUser(tx *gorm.DB, targetID int64) (*model.User, error) {
 	var target model.User
-	if err := tx.First(&target, "telegram_id = ?", targetID).Error; err != nil {
+	if err := tx.Where("telegram_id = ?", targetID).First(&target).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errs.ErrUserNotFound
 		}
