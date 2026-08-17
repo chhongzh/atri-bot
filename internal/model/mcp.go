@@ -13,8 +13,8 @@ type MCPProvider struct {
 	UserID int64  `gorm:"not null;uniqueIndex:idx_mcp_provider_user_name"`
 	Name   string `gorm:"size:255;not null;uniqueIndex:idx_mcp_provider_user_name"`
 	URL    string `gorm:"size:2048;not null"`
-	Meta   string `gorm:"type:json;not null;default:'{}'"`
-	Header string `gorm:"type:json;not null;default:'{}'"`
+	Meta   string `gorm:"type:json;not null"`
+	Header string `gorm:"type:json;not null"`
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
