@@ -56,6 +56,8 @@ atri-bot 是一个跑在 Telegram 上的角色聊天机器人。多数同类项�
 项目的出发点是把二次元角色带到现实。想要天气就自己查，想发邮件就自己发，想通过 MCP 接外部服务也可以。工具目前的重点在
 MCP，内置工具里发送邮件和热点搜索已经能用，其余还在开发。
 
+如果不想手动下载、编辑配置和管理进程，可以使用配套的 [atri-bot-launcher](https://github.com/chhongzh/atri-bot-launcher)。启动器提供桌面端和 Android 图形界面，负责下载对应版本的内核、编辑 `config.yaml`，以及启动、停止和查看日志。启动器的使用说明见它自己的 [README](https://github.com/chhongzh/atri-bot-launcher#readme)。
+
 机器人是多用户的。每个用户有独立的 AI 连接配置、角色、会话历史和工具权限，互相不干扰。切换角色随时可以，会话历史按角色隔离，不会串戏。
 
 ### 官方实例（最后选择）
@@ -162,9 +164,8 @@ Telegram 里的命令就够，没必要再做一个网页。
 
 ### 发布
 
-PR 或分支推送时，CI 会自动跑一次 goreleaser snapshot，验证所有目标平台都能编译，不创建 Release。手动发布在 GitHub Actions
-里触发，填版本号和是否草稿。版本号自动补 `v` 前缀并打 tag，默认以草稿形式发布，确认无误后在 Release 页面手动发布。Android 产物在
-CI 中用 Android NDK 交叉编译。正式发布还会构建 `linux/amd64`、`linux/arm64` 的 Docker 镜像，推送到
+在 GitHub Actions 中手动触发 goreleaser 时只构建 snapshot，不创建 Release。推送 tag 时才正式发布。Android 产物在 CI 中用 Android
+NDK 交叉编译。正式发布还会构建 `linux/amd64`、`linux/arm64` 的 Docker 镜像，推送到
 `ghcr.io/chhongzh/atri-bot`，打上版本号和 `latest` 标签。
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
