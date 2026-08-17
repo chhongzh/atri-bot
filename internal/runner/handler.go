@@ -115,6 +115,13 @@ func (r *Runner) handleChatError(c telebot.Context, err error, fields []zap.Fiel
 		}
 		return err
 	}
+	if errors.Is(err, errs.ErrCharacterNotSelected) {
+		r.logger.Warn("user attempted chat without selecting a character", fields...)
+		if err = c.Send("尚未选择角色，请先使用 /character 查看可用角色，再使用 /character <character-id> 选择角色。"); err == nil {
+			r.onMessageSent(c)
+		}
+		return err
+	}
 	return err
 }
 
@@ -151,14 +158,6 @@ func (r *Runner) handlerForMedia(c telebot.Context) error {
 	}
 	if kind == "" {
 		return nil
-	}
-	characterID := settings.CharacterID
-	if characterID == "" {
-		character, ok := r.characters.Default()
-		if !ok {
-			return errs.ErrNoCharacters
-		}
-		characterID = character.ID
 	}
 	if strings.TrimSpace(caption) == "" {
 		caption = "用户发送了" + map[string]string{"image": "一张图片", "audio": "一段音频", "video": "一段视频"}[kind]

@@ -11,6 +11,7 @@ import (
 
 var (
 	ErrCharacterNotFound        = stderrors.New("character not found")
+	ErrCharacterNotSelected     = stderrors.New("no character selected")
 	ErrCharacterUnavailable     = stderrors.New("selected character is unavailable")
 	ErrPromptTemplateNoMessage  = stderrors.New("prompt template returned no message")
 	ErrInvalidProviderID        = stderrors.New("invalid provider id")

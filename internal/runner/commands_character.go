@@ -52,7 +52,7 @@ func (r *Runner) commandCharacter(c telebot.Context, args []string) {
 			return
 		}
 		if settings.CharacterID == "" {
-			_ = r.sendSystemResultAndDelete(c, "尚未选择角色，发送消息时会自动选择默认角色。")
+			_ = r.sendSystemResultAndDelete(c, "尚未选择角色，请先使用 /character 查看可用角色，再使用 /character <character-id> 选择角色。")
 			return
 		}
 		_ = r.sendSystemResultAndDelete(c, "当前角色："+settings.CharacterID)

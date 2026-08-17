@@ -476,14 +476,7 @@ func (m *Manager) newState(ctx context.Context, userID int64, c telebot.Context)
 	}
 	characterID := settings.CharacterID
 	if characterID == "" {
-		defaultCharacter, ok := m.characters.Default()
-		if !ok {
-			return nil, errs.ErrNoCharacters
-		}
-		characterID = defaultCharacter.ID
-		if err = m.accounts.SetCharacter(ctx, userID, characterID); err != nil {
-			return nil, err
-		}
+		return nil, errs.ErrCharacterNotSelected
 	} else if _, ok := m.characters.Get(characterID); !ok {
 		return nil, errs.CharacterUnavailable(characterID)
 	}
