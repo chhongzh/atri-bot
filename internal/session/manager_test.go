@@ -151,6 +151,37 @@ func TestInterruptedRoundPreservesMessageOrder(t *testing.T) {
 	}
 }
 
+func TestAppendUserDoesNotDependOnSameValueUpdateRowsAffected(t *testing.T) {
+	manager, db, _ := newTestManager(t)
+	ctx := context.Background()
+	zeroedUpdates := 0
+	if err := db.Callback().Update().After("gorm:update").Register("test:zero_session_round_rows_affected", func(tx *gorm.DB) {
+		if tx.Statement.Table == (model.SessionRound{}).TableName() {
+			tx.RowsAffected = 0
+			zeroedUpdates++
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	roundID, err := manager.StartRound(ctx, 15, "character.one", schema.UserMessage("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = manager.AppendInterrupted(ctx, 15, "character.one", roundID, schema.AssistantMessage("partial", nil)); err != nil {
+		t.Fatal(err)
+	}
+	if zeroedUpdates != 1 {
+		t.Fatalf("session round updates = %d, want 1", zeroedUpdates)
+	}
+	if err = manager.AppendUser(ctx, 15, "character.one", roundID, schema.UserMessage("continued")); err != nil {
+		t.Fatal(err)
+	}
+	if zeroedUpdates != 1 {
+		t.Fatalf("session round updates after append = %d, want no redundant update", zeroedUpdates)
+	}
+}
+
 func TestToolResultIsCompactedPerMessageRow(t *testing.T) {
 	manager, db, logs := newTestManager(t)
 	ctx := context.Background()

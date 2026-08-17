@@ -22,6 +22,7 @@ import (
 	pkgErrors "github.com/pkg/errors"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -169,17 +170,15 @@ func (m *Manager) AppendUser(
 	metadataRecord.CreatedAt = sentAt
 	messageRecord.CreatedAt = sentAt
 	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		round, findErr := m.findRoundForUpdate(tx, userID, characterID, roundID)
+		if findErr != nil {
+			return findErr
+		}
 		if createErr := tx.Create(&[]model.SessionMessage{metadataRecord, messageRecord}).Error; createErr != nil {
 			return createErr
 		}
-		result := tx.Model(&model.SessionRound{}).
-			Where("id = ? AND user_id = ? AND character_id = ?", roundID, userID, characterID).
-			Update("interrupted", true)
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected != 1 {
-			return errs.SessionRoundNotFound(roundID)
+		if !round.Interrupted {
+			return tx.Model(round).Update("interrupted", true).Error
 		}
 		return nil
 	})
@@ -274,6 +273,24 @@ func (m *Manager) Load(ctx context.Context, userID int64, characterID string, cu
 		return nil, err
 	}
 	return append(history, current...), nil
+}
+
+func (m *Manager) findRoundForUpdate(
+	db *gorm.DB,
+	userID int64,
+	characterID string,
+	roundID uint,
+) (*model.SessionRound, error) {
+	var round model.SessionRound
+	err := db.
+		Select("id", "interrupted", "completed").
+		Clauses(clause.Locking{Strength: clause.LockingStrengthUpdate}).
+		Where("id = ? AND user_id = ? AND character_id = ?", roundID, userID, characterID).
+		Take(&round).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, errs.SessionRoundNotFound(roundID)
+	}
+	return &round, err
 }
 
 func (m *Manager) appendMessagesDB(
