@@ -23,6 +23,7 @@ import (
 	"github.com/tidwall/sjson"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ConfiguredFunc[C, I, O any] func(
@@ -262,7 +263,13 @@ func (m *Manager) SetConfig(ctx context.Context, userID int64, name string, valu
 		return err
 	}
 	record := model.ToolConfig{UserID: userID, ToolName: name, Config: string(normalized)}
-	if err = m.db.WithContext(ctx).Save(&record).Error; err != nil {
+	if err = m.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "user_id"},
+			{Name: "tool_name"},
+		},
+		DoUpdates: clause.AssignmentColumns([]string{"config", "updated_at"}),
+	}).Create(&record).Error; err != nil {
 		return err
 	}
 	m.logger.Info("updated tool config", zap.Int64("user_id", userID), zap.String("tool", name))
@@ -318,15 +325,26 @@ func (m *Manager) ConfigJSON(ctx context.Context, userID int64, name string) ([]
 	err := m.db.WithContext(ctx).
 		Where("user_id = ? AND tool_name = ?", userID, name).
 		First(&record).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		record = model.ToolConfig{UserID: userID, ToolName: name, Config: string(registered.defaultConfig)}
-		if createErr := m.db.WithContext(ctx).Save(&record).Error; createErr != nil {
-			return nil, createErr
-		}
-		return append([]byte(nil), registered.defaultConfig...), nil
+	if err == nil {
+		return []byte(record.Config), nil
 	}
-	if err != nil {
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
+	}
+	record = model.ToolConfig{UserID: userID, ToolName: name, Config: string(registered.defaultConfig)}
+	if createErr := m.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "user_id"},
+			{Name: "tool_name"},
+		},
+		DoNothing: true,
+	}).Create(&record).Error; createErr != nil {
+		return nil, createErr
+	}
+	if loadErr := m.db.WithContext(ctx).
+		Where("user_id = ? AND tool_name = ?", userID, name).
+		Take(&record).Error; loadErr != nil {
+		return nil, loadErr
 	}
 	return []byte(record.Config), nil
 }

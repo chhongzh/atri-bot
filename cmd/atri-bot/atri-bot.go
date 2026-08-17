@@ -54,7 +54,10 @@ func getLogger() (*zap.Logger, error) {
 }
 
 func getDB(cfg *Config, log *zap.Logger) (*gorm.DB, error) {
-	gormConfig := &gorm.Config{Logger: utils.NewGormLogger(log)}
+	gormConfig := &gorm.Config{
+		Logger:         utils.NewGormLogger(log),
+		TranslateError: true,
+	}
 	switch cfg.Database.Type {
 	case "mysql":
 		return gorm.Open(mysql.Open(cfg.Database.DSN), gormConfig)

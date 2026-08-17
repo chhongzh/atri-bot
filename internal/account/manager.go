@@ -14,6 +14,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/model"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Manager struct {
@@ -157,6 +158,9 @@ func (m *Manager) SetRole(ctx context.Context, actorID, targetID int64, role mod
 	}
 
 	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockActiveAdmins(tx); err != nil {
+			return err
+		}
 		if err := requireAdmin(tx, actorID); err != nil {
 			return err
 		}
@@ -175,6 +179,9 @@ func (m *Manager) SetRole(ctx context.Context, actorID, targetID int64, role mod
 
 func (m *Manager) SetBanned(ctx context.Context, actorID, targetID int64, banned bool) error {
 	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockActiveAdmins(tx); err != nil {
+			return err
+		}
 		if err := requireAdmin(tx, actorID); err != nil {
 			return err
 		}
@@ -193,6 +200,9 @@ func (m *Manager) SetBanned(ctx context.Context, actorID, targetID int64, banned
 
 func (m *Manager) Delete(ctx context.Context, actorID, targetID int64) error {
 	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockActiveAdmins(tx); err != nil {
+			return err
+		}
 		if err := requireAdmin(tx, actorID); err != nil {
 			return err
 		}
@@ -356,6 +366,16 @@ func requireAdmin(tx *gorm.DB, id int64) error {
 		return errs.ErrPermissionDenied
 	}
 	return nil
+}
+
+func lockActiveAdmins(tx *gorm.DB) error {
+	var admins []model.User
+	return tx.
+		Select("telegram_id").
+		Clauses(clause.Locking{Strength: clause.LockingStrengthUpdate}).
+		Where("role = ? AND banned = ?", model.RoleAdmin, false).
+		Order("telegram_id ASC").
+		Find(&admins).Error
 }
 
 func loadTargetUser(tx *gorm.DB, targetID int64) (*model.User, error) {

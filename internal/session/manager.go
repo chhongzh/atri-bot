@@ -197,8 +197,8 @@ func (m *Manager) AppendInterrupted(
 	}
 	defer release()
 	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err = m.appendMessagesDB(tx, userID, characterID, roundID, true, messages...); err != nil {
-			return err
+		if appendErr := m.appendMessagesDB(tx, userID, characterID, roundID, true, messages...); appendErr != nil {
+			return appendErr
 		}
 		return tx.Model(&model.SessionRound{}).
 			Where("id = ? AND user_id = ? AND character_id = ?", roundID, userID, characterID).
@@ -220,8 +220,8 @@ func (m *Manager) CompleteRound(
 	}
 	defer release()
 	if err = m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err = m.appendMessagesDB(tx, userID, characterID, roundID, false, messages...); err != nil {
-			return err
+		if appendErr := m.appendMessagesDB(tx, userID, characterID, roundID, false, messages...); appendErr != nil {
+			return appendErr
 		}
 		return tx.Model(&model.SessionRound{}).
 			Where("id = ? AND user_id = ? AND character_id = ?", roundID, userID, characterID).

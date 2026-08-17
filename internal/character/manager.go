@@ -20,6 +20,7 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const localProviderID = "local"
@@ -56,7 +57,7 @@ func New(db *gorm.DB, logger *zap.Logger, cfg Config) *Manager {
 }
 
 func (m *Manager) Init(ctx context.Context) error {
-	if err := m.db.AutoMigrate(&model.Provider{}); err != nil {
+	if err := m.db.WithContext(ctx).AutoMigrate(&model.Provider{}); err != nil {
 		return err
 	}
 	localRoot := filepath.Join(m.cfg.CWD, "chardefs")
@@ -67,7 +68,10 @@ func (m *Manager) Init(ctx context.Context) error {
 		BuiltIn: true,
 		Enabled: true,
 	}
-	if err := m.db.WithContext(ctx).Where("id = ?", local.ID).Assign(local).FirstOrCreate(&local).Error; err != nil {
+	if err := m.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"kind", "url", "branch", "path", "built_in", "enabled", "updated_at"}),
+	}).Create(&local).Error; err != nil {
 		return err
 	}
 	if strings.TrimSpace(m.cfg.RemoteURL) != "" {
@@ -80,7 +84,10 @@ func (m *Manager) Init(ctx context.Context) error {
 			BuiltIn: true,
 			Enabled: true,
 		}
-		if err := m.db.WithContext(ctx).Where("id = ?", remote.ID).FirstOrCreate(&remote).Error; err != nil {
+		if err := m.db.WithContext(ctx).Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "id"}},
+			DoNothing: true,
+		}).Create(&remote).Error; err != nil {
 			return err
 		}
 	}

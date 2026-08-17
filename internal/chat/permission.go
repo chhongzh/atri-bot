@@ -17,6 +17,7 @@ import (
 	pkgErrors "github.com/pkg/errors"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func normalizeDefaultToolPermissions(
@@ -77,7 +78,13 @@ func (m *Manager) SetToolPermission(ctx context.Context, userID int64, toolName 
 		return errs.ToolNotFound(toolName)
 	}
 	record := model.ToolPermission{UserID: userID, ToolName: toolName, Allowed: allowed}
-	if err := m.db.WithContext(ctx).Save(&record).Error; err != nil {
+	if err := m.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "user_id"},
+			{Name: "tool_name"},
+		},
+		DoUpdates: clause.AssignmentColumns([]string{"allowed", "updated_at"}),
+	}).Create(&record).Error; err != nil {
 		return err
 	}
 	m.logger.Info("updated tool permission",

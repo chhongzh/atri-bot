@@ -93,7 +93,7 @@ func (m *Manager) Add(ctx context.Context, userID int64, name, rawURL, meta, hea
 
 	provider := &model.MCPProvider{UserID: userID, Name: name, URL: rawURL, Meta: meta, Header: header}
 	if err = m.db.WithContext(ctx).Create(provider).Error; err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return nil, errs.MCPProviderExists(name)
 		}
 		return nil, err
@@ -184,7 +184,11 @@ func (m *Manager) SetValue(ctx context.Context, userID int64, name, path string,
 	provider.URL = decoded.URL
 	provider.Meta = string(decoded.Meta)
 	provider.Header = string(decoded.Header)
-	if err = m.db.WithContext(ctx).Save(provider).Error; err != nil {
+	if err = m.db.WithContext(ctx).Model(provider).Updates(map[string]any{
+		"url":    provider.URL,
+		"meta":   provider.Meta,
+		"header": provider.Header,
+	}).Error; err != nil {
 		return nil, err
 	}
 	m.logger.Info("updated mcp provider",

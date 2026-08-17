@@ -20,7 +20,7 @@ import (
 
 func newTestManager(t *testing.T, runtime configmanager.RuntimeSettings, allowPrivateIP bool) (*Manager, *account.Manager) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"))
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{TranslateError: true})
 	if err != nil {
 		t.Fatal(err)
 	}
