@@ -7,10 +7,13 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/chhongzh/atri-bot/internal/errs"
+	"github.com/chhongzh/atri-bot/internal/model"
 	"github.com/glebarez/sqlite"
+	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
 
@@ -75,5 +78,25 @@ func TestSetOverwritesExistingValues(t *testing.T) {
 	user, err := manager.QueryUser[string](ctx, 7, "model")
 	if err != nil || user != "second" {
 		t.Fatalf("user value = %q, %v", user, err)
+	}
+}
+
+func TestQueryConditionQuotesMySQLReservedKey(t *testing.T) {
+	db, err := gorm.Open(mysql.New(mysql.Config{
+		DSN:                       "",
+		SkipInitializeWithVersion: true,
+	}), &gorm.Config{DryRun: true, DisableAutomaticPing: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	query := db.Where(map[string]any{
+		"scope":   model.GlobalScope,
+		"user_id": int64(0),
+		"key":     "runtime",
+	}).First(&model.Config{})
+	sql := query.Statement.SQL.String()
+	if !strings.Contains(sql, "`key`") {
+		t.Fatalf("generated SQL does not quote reserved key column: %s", sql)
 	}
 }
