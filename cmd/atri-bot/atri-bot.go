@@ -14,6 +14,8 @@ import (
 	"github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/chhongzh/atri-bot/internal/tools/email"
 	"github.com/chhongzh/atri-bot/internal/tools/hotspot"
+	"github.com/chhongzh/atri-bot/internal/tools/loadimage"
+	"github.com/chhongzh/atri-bot/internal/tools/sendimage"
 	"github.com/chhongzh/atri-bot/internal/tools/webread"
 	"github.com/chhongzh/atri-bot/internal/tools/websearch"
 	"github.com/chhongzh/atri-bot/internal/utils"
@@ -83,6 +85,8 @@ func getRunner(logger *zap.Logger, restyClient *resty.Client, browser *rod.Brows
 	registrars := []tools.Registrar{
 		email.BindedRegister(cfg.Security.AllowPrivateIP),
 		hotspot.BindedRegister(logger, restyClient),
+		loadimage.Register,
+		sendimage.Register,
 	}
 	if browser != nil {
 		registrars = append(registrars,

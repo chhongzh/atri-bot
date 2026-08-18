@@ -12,10 +12,13 @@ import (
 
 var (
 	ErrRunningStateMissing     = stderrors.New("tool running state is missing")
+	ErrTelebotContextMissing   = stderrors.New("telegram context is missing")
 	ErrToolNotFound            = stderrors.New("tool not found")
 	ErrConfigPathNotFound      = stderrors.New("tool config path not found")
 	ErrToolConfigValueRequired = stderrors.New("tool config value is required")
 	ErrToolNameRequired        = stderrors.New("tool_name is required")
+	ErrImageURLRequired        = stderrors.New("image URL is required")
+	ErrImageURLInvalid         = stderrors.New("image URL must be an HTTP or HTTPS URL")
 )
 
 // ToolNotFound reports an unknown tool by name.
