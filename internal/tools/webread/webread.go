@@ -9,10 +9,8 @@ import (
 	"time"
 
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
-	"github.com/chhongzh/atri-bot/internal/tools/webread/stealth"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/proto"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -63,19 +61,18 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
 	defer cancel()
 
-	page, err := browser.Page(proto.TargetCreateTarget{})
+	page, closePage, err := utils.NewIncognitoPage(ctx, browser)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to open blank page")
+		return nil, errors.Wrap(err, "failed to open incognito page")
 	}
-	defer func(page *rod.Page) {
-		err := page.Close()
+	defer func() {
+		err := closePage()
 		if err != nil {
 			logger.Warn("failed to close page, this may cause leakage!", zap.Error(err))
 		}
-	}(page)
-	page = page.Context(ctx)
+	}()
 
-	remove, err := stealth.Inject(page)
+	remove, err := utils.InjectStealth(page)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to install stealth script")
 	}

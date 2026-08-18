@@ -15,6 +15,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/tools/email"
 	"github.com/chhongzh/atri-bot/internal/tools/hotspot"
 	"github.com/chhongzh/atri-bot/internal/tools/webread"
+	"github.com/chhongzh/atri-bot/internal/tools/websearch"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/glebarez/sqlite"
 	"github.com/go-rod/rod"
@@ -84,7 +85,9 @@ func getRunner(logger *zap.Logger, restyClient *resty.Client, browser *rod.Brows
 		hotspot.BindedRegister(logger, restyClient),
 	}
 	if browser != nil {
-		registrars = append(registrars, webread.BindedRegister(logger, browser))
+		registrars = append(registrars,
+			webread.BindedRegister(logger, browser),
+			websearch.BindedRegister(logger, browser))
 	}
 
 	return runner.New(logger, &runner.Config{
