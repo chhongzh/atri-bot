@@ -28,6 +28,13 @@ import (
 	"resty.dev/v3"
 )
 
+// 由goreleaser自动注入
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	app := fx.New(
 		fx.Provide(getConfig),
@@ -41,6 +48,7 @@ func main() {
 			return &fxevent.ZapLogger{Logger: log}
 		}),
 
+		fx.Invoke(showVersion),
 		fx.Invoke(run),
 	)
 
@@ -149,4 +157,12 @@ func run(r *runner.Runner, lc fx.Lifecycle) {
 			return nil
 		},
 	})
+}
+
+func showVersion(logger *zap.Logger) {
+	logger.Info("Version Info",
+		zap.String("version", version),
+		zap.String("commit", commit),
+		zap.String("date", date),
+	)
 }
