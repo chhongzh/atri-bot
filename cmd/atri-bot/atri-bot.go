@@ -12,8 +12,6 @@ import (
 	"github.com/chhongzh/atri-bot/internal/runner"
 	"github.com/chhongzh/atri-bot/internal/security"
 	"github.com/chhongzh/atri-bot/internal/tools"
-	"github.com/chhongzh/atri-bot/internal/tools/email"
-	"github.com/chhongzh/atri-bot/internal/tools/hotspot"
 	"github.com/chhongzh/atri-bot/internal/tools/loadimage"
 	"github.com/chhongzh/atri-bot/internal/tools/sendimage"
 	"github.com/chhongzh/atri-bot/internal/tools/webread"
@@ -83,8 +81,6 @@ func getDB(cfg *Config, log *zap.Logger) (*gorm.DB, error) {
 
 func getRunner(logger *zap.Logger, restyClient *resty.Client, browser *rod.Browser, cfg *Config, db *gorm.DB) *runner.Runner {
 	registrars := []tools.Registrar{
-		email.BindedRegister(cfg.Security.AllowPrivateIP),
-		hotspot.BindedRegister(logger, restyClient),
 		loadimage.Register,
 		sendimage.Register,
 	}
