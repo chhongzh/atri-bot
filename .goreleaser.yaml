@@ -24,10 +24,11 @@ builds:
 
 
   - id: android-arm64
-    # Android arm64 不需要 CGO，可直接交叉编译。
+    # Android 必须通过 bionic 使用系统 DNS resolver。
     main: ./cmd/atri-bot
     env:
-      - CGO_ENABLED=0
+      - CGO_ENABLED=1
+      - CC={{ .Env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
     goos:
       - android
     goarch:
@@ -37,7 +38,7 @@ builds:
 
 
   - id: android-amd64
-    # Go 对 android/amd64 要求外部链接，使用 NDK clang。
+    # Android 必须通过 bionic 使用系统 DNS resolver。
     main: ./cmd/atri-bot
     env:
       - CGO_ENABLED=1
