@@ -117,7 +117,7 @@ func (r *Runner) handleChatError(c telebot.Context, err error, fields []zap.Fiel
 	}
 	if errors.Is(err, errs.ErrCharacterNotSelected) {
 		r.logger.Warn("user attempted chat without selecting a character", fields...)
-		if err = c.Send("尚未选择角色，请先使用 /character 查看可用角色，再使用 /character <character-id> 选择角色。"); err == nil {
+		if err = c.Send("尚未选择角色，请先使用 /characters 查看可用角色，再使用 /character <character-id> 选择角色。"); err == nil {
 			r.onMessageSent(c)
 		}
 		return err
