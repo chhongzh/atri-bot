@@ -17,12 +17,14 @@ import (
 	"github.com/chhongzh/atri-bot/internal/constants"
 	filesmanager "github.com/chhongzh/atri-bot/internal/files"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
+	memorymanager "github.com/chhongzh/atri-bot/internal/memory"
 	"github.com/chhongzh/atri-bot/internal/security"
 	"github.com/chhongzh/atri-bot/internal/session"
 	"github.com/chhongzh/atri-bot/internal/tools"
 	builtinconfig "github.com/chhongzh/atri-bot/internal/tools/builtin/config"
 	builtinexit "github.com/chhongzh/atri-bot/internal/tools/builtin/exit"
 	builtinmcp "github.com/chhongzh/atri-bot/internal/tools/builtin/mcp"
+	builtinmemory "github.com/chhongzh/atri-bot/internal/tools/builtin/memory"
 	"go.uber.org/zap"
 	"gopkg.in/telebot.v4"
 )
@@ -66,6 +68,12 @@ func (r *Runner) Init(ctx context.Context) error {
 		return err
 	}
 	r.logger.Debug("session manager initialized")
+	r.memories = memorymanager.New(r.db, r.logger)
+	if err := r.memories.Init(); err != nil {
+		r.logger.Error("failed to initialize memory manager", zap.Error(err))
+		return err
+	}
+	r.logger.Debug("memory manager initialized")
 	r.files = filesmanager.New(context.WithoutCancel(ctx), filepath.Join(r.cfg.CWD, "data", "files"), r.cfg.FilesMaxStorageBytes, r.cfg.FilesCleanupAfter, r.logger)
 	if err := r.files.Init(); err != nil {
 		return err
@@ -88,6 +96,10 @@ func (r *Runner) Init(ctx context.Context) error {
 		r.logger.Error("failed to register builtin exit tool", zap.Error(err))
 		return err
 	}
+	if err := builtinmemory.Register(r.tools, r.memories); err != nil {
+		r.logger.Error("failed to register builtin memory tools", zap.Error(err))
+		return err
+	}
 	if err := builtinmcp.Register(r.tools, r.mcp); err != nil {
 		r.logger.Error("failed to register builtin mcp tool", zap.Error(err))
 		return err
@@ -102,7 +114,7 @@ func (r *Runner) Init(ctx context.Context) error {
 		return err
 	}
 	r.logger.Debug("character manager initialized")
-	r.chats = chat.New(context.WithoutCancel(ctx), r.logger, r.db, r.accounts, r.configs, r.characters, r.sessions, r.tools, r.mcp, r.files, chat.Config{
+	r.chats = chat.NewWithMemory(context.WithoutCancel(ctx), r.logger, r.db, r.accounts, r.configs, r.characters, r.sessions, r.tools, r.mcp, r.files, r.memories, chat.Config{
 		StateTTL:          r.cfg.StateTTL,
 		ModelTimeout:      r.cfg.AIModelTimeout,
 		AllowPrivateIP:    r.cfg.AllowPrivateIP,

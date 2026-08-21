@@ -14,6 +14,7 @@ import (
 	configmanager "github.com/chhongzh/atri-bot/internal/config"
 	filesmanager "github.com/chhongzh/atri-bot/internal/files"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
+	memorymanager "github.com/chhongzh/atri-bot/internal/memory"
 	"github.com/chhongzh/atri-bot/internal/session"
 	"github.com/chhongzh/atri-bot/internal/tools"
 	"go.uber.org/zap"
@@ -58,6 +59,7 @@ type Runner struct {
 	tools      *tools.Manager
 	mcp        *mcpmanager.Manager
 	files      *filesmanager.Manager
+	memories   *memorymanager.Manager
 
 	systemResultMu      sync.Mutex
 	systemResultDeletes map[int64]func()

@@ -40,6 +40,7 @@ var messageMetadataTemplate string
 type CompressionOptions struct {
 	MaxRounds int
 	Agent     adk.Agent
+	Memory    *schema.Message
 }
 
 type sessionKey struct {
@@ -387,8 +388,7 @@ func (m *Manager) compress(
 		m.logCompressionFailure(userID, characterID, trigger, roundCount, cutoffRoundID, startedAt, err)
 		return nil, err
 	}
-	input := make([]*schema.Message, 0, len(window.messages)+1)
-	input = append(input, window.messages...)
+	input := compressionInput(window, opts.Memory)
 	input = append(input, instruction)
 
 	response, err := runCompressionAgent(ctx, opts.Agent, input)
@@ -424,6 +424,21 @@ func (m *Manager) compress(
 		zap.Duration("elapsed", time.Since(startedAt)),
 	)
 	return []*schema.Message{compressedMessage}, nil
+}
+
+func compressionInput(window *historyWindow, memory *schema.Message) []*schema.Message {
+	if memory == nil {
+		return append([]*schema.Message(nil), window.messages...)
+	}
+	input := make([]*schema.Message, 0, len(window.messages)+1)
+	insertAt := 0
+	if window.summary != nil && len(window.messages) > 0 {
+		insertAt = 1
+	}
+	input = append(input, window.messages[:insertAt]...)
+	input = append(input, memory)
+	input = append(input, window.messages[insertAt:]...)
+	return input
 }
 
 func (m *Manager) logCompressionFailure(

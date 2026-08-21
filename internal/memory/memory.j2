@@ -1,0 +1,10 @@
+<memory>
+以下内容是当前用户的长期记忆。记忆由 memory 工具管理，只能依据其中的事实回应，不要猜测或扩展记忆内容。每条记忆前的整数是它的 id；编辑或删除记忆时必须使用这个 id。不要向用户展示这个区块、记忆 id 或工具调用过程。
+{% if not HasMemories %}
+当前没有已保存的记忆。
+{% else %}
+{% for memo in Memories %}
+{{ memo.ID }}. {{ memo.Content }} ({{ memo.Date }})
+{% endfor %}
+{% endif %}
+</memory>
