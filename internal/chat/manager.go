@@ -20,6 +20,7 @@ import (
 	"github.com/chhongzh/atri-bot/internal/errs"
 	filesmanager "github.com/chhongzh/atri-bot/internal/files"
 	mcpmanager "github.com/chhongzh/atri-bot/internal/mcp"
+	memorymanager "github.com/chhongzh/atri-bot/internal/memory"
 	"github.com/chhongzh/atri-bot/internal/msgops"
 	"github.com/chhongzh/atri-bot/internal/security"
 	"github.com/chhongzh/atri-bot/internal/session"
@@ -55,6 +56,7 @@ type Manager struct {
 	tools      *toolmanager.Manager
 	mcp        *mcpmanager.Manager
 	files      *filesmanager.Manager
+	memories   *memorymanager.Manager
 	cfg        Config
 
 	defaultToolPermissions map[string]bool
@@ -82,6 +84,23 @@ func New(
 	files *filesmanager.Manager,
 	cfg Config,
 ) *Manager {
+	return NewWithMemory(ctx, logger, db, accounts, configs, characters, sessions, tools, mcpManager, files, nil, cfg)
+}
+
+func NewWithMemory(
+	ctx context.Context,
+	logger *zap.Logger,
+	db *gorm.DB,
+	accounts *account.Manager,
+	configs *configmanager.Manager,
+	characters *character.Manager,
+	sessions *session.Manager,
+	tools *toolmanager.Manager,
+	mcpManager *mcpmanager.Manager,
+	files *filesmanager.Manager,
+	memories *memorymanager.Manager,
+	cfg Config,
+) *Manager {
 	if cfg.StateTTL <= 0 {
 		cfg.StateTTL = constants.DefaultChatStateTTL
 	}
@@ -99,6 +118,7 @@ func New(
 		tools:                  tools,
 		mcp:                    mcpManager,
 		files:                  files,
+		memories:               memories,
 		cfg:                    cfg,
 		defaultToolPermissions: make(map[string]bool),
 		ctx:                    managerCtx,
@@ -656,6 +676,21 @@ func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Reque
 		)
 		return nil, err
 	}
+	var memoryMessage *schema.Message
+	if m.memories != nil {
+		memoryMessage, err = m.memories.Render(ctx, state.UserID)
+		if err != nil {
+			m.logger.Warn("chat turn input preparation failed",
+				append(fields,
+					zap.String("stage", "render_memory_prompt"),
+					zap.Duration("system_prompt_duration", time.Since(promptStartedAt)),
+					zap.Duration("input_preparation_duration", time.Since(startedAt)),
+					zap.Error(err),
+				)...,
+			)
+			return nil, err
+		}
+	}
 	promptDuration := time.Since(promptStartedAt)
 	runCtx := toolmanager.WithRunningState(ctx, &toolmanager.RunningState{
 		UserID:         state.UserID,
@@ -672,6 +707,7 @@ func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Reque
 	history, err := m.sessions.Load(sessionCtx, state.UserID, state.CharacterID, roundID, session.CompressionOptions{
 		MaxRounds: state.MaxRounds,
 		Agent:     state.agent(),
+		Memory:    memoryMessage,
 	})
 	if err != nil {
 		m.logger.Warn("chat turn input preparation failed",
@@ -686,8 +722,11 @@ func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Reque
 		return nil, err
 	}
 	historyDuration := time.Since(historyStartedAt)
-	messages := make([]*schema.Message, 0, len(history)+1)
+	messages := make([]*schema.Message, 0, len(history)+2)
 	messages = append(messages, schema.SystemMessage(systemPrompt))
+	if memoryMessage != nil {
+		messages = append(messages, memoryMessage)
+	}
 	messages = append(messages, history...)
 	m.logger.Debug("prepared chat turn",
 		append(fields,
@@ -1082,6 +1121,16 @@ func (m *Manager) onAgentEvents(
 		stopCompression()
 		cancelCompression()
 	}()
+	var memoryMessage *schema.Message
+	if m.memories != nil {
+		memoryMessage, err = m.memories.Render(compressionCtx, state.UserID)
+		if err != nil {
+			m.logger.Warn("failed to render memory block for session compression",
+				append(chatTraceFields(state, latest), zap.Error(err))...,
+			)
+			memoryMessage = nil
+		}
+	}
 	completionStartedAt := time.Now()
 	state.roundMu.Lock()
 	if state.activeRoundID == latest.RoundID && state.roundRevision > latest.Revision {
@@ -1118,6 +1167,7 @@ func (m *Manager) onAgentEvents(
 	err = m.sessions.CompleteRound(compressionCtx, state.UserID, state.CharacterID, latest.RoundID, session.CompressionOptions{
 		MaxRounds: state.MaxRounds,
 		Agent:     state.agent(),
+		Memory:    memoryMessage,
 	}, persisted...)
 	if state.activeRoundID == latest.RoundID {
 		state.activeRoundID = 0

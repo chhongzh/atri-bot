@@ -9,4 +9,6 @@ Return only the compressed history text. Do not reply to the user, continue the 
 
 Preserve information needed for future conversation continuity, including user facts and preferences, relationship and emotional context, decisions, promises, unfinished requests, important assistant actions, and useful tool results. Preserve exact identifiers, dates, quantities, constraints, and unresolved errors when they matter.
 
+The current <memory> system block is authoritative long-term memory. Never copy its entries, ids, or wording into the compressed history. Do not summarize facts solely because they appeared in that block. If an old summary contains a memory that is no longer present in the current <memory> block, discard it instead of carrying it into the next summary.
+
 Discard transient wording, duplicated details, internal reasoning, tool-call mechanics, and obsolete intermediate steps. Do not copy the character definition or general chat rules from the first system message. Write a compact factual memory that can be supplied later as a system message.
