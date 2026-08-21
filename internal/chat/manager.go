@@ -670,9 +670,8 @@ func (m *Manager) genInput(ctx context.Context, state *UserState, items []*Reque
 	}()
 	historyStartedAt := time.Now()
 	history, err := m.sessions.Load(sessionCtx, state.UserID, state.CharacterID, roundID, session.CompressionOptions{
-		MaxRounds:    state.MaxRounds,
-		SystemPrompt: systemPrompt,
-		Agent:        state.agent(),
+		MaxRounds: state.MaxRounds,
+		Agent:     state.agent(),
 	})
 	if err != nil {
 		m.logger.Warn("chat turn input preparation failed",
@@ -1076,14 +1075,7 @@ func (m *Manager) onAgentEvents(
 	}
 
 	persisted := outputs
-	promptStartedAt := time.Now()
-	systemPrompt, err := m.renderSystemPrompt(ctx, state, latest.Context)
-	if err != nil {
-		outcome = "completion_prompt_error"
-		completeRequests(turn.Consumed, err)
-		return err
-	}
-	completionPromptDuration := time.Since(promptStartedAt)
+	var err error
 	compressionCtx, cancelCompression := context.WithTimeout(context.WithoutCancel(ctx), m.cfg.ModelTimeout)
 	stopCompression := context.AfterFunc(m.ctx, cancelCompression)
 	defer func() {
@@ -1117,7 +1109,6 @@ func (m *Manager) onAgentEvents(
 				zap.Uint64("completed_revision", latest.Revision),
 				zap.Uint64("current_revision", currentRevision),
 				zap.Int("persisted_messages", len(persisted)),
-				zap.Duration("completion_prompt_duration", completionPromptDuration),
 				zap.Duration("persistence_duration", persistenceDuration),
 				zap.Duration("turn_elapsed", time.Since(turnStartedAt)),
 			)...,
@@ -1125,9 +1116,8 @@ func (m *Manager) onAgentEvents(
 		return nil
 	}
 	err = m.sessions.CompleteRound(compressionCtx, state.UserID, state.CharacterID, latest.RoundID, session.CompressionOptions{
-		MaxRounds:    state.MaxRounds,
-		SystemPrompt: systemPrompt,
-		Agent:        state.agent(),
+		MaxRounds: state.MaxRounds,
+		Agent:     state.agent(),
 	}, persisted...)
 	if state.activeRoundID == latest.RoundID {
 		state.activeRoundID = 0
@@ -1146,7 +1136,6 @@ func (m *Manager) onAgentEvents(
 		outcome = "silent_exit"
 		m.logger.Info("chat turn exited without a reply",
 			append(chatTraceFields(state, latest),
-				zap.Duration("completion_prompt_duration", completionPromptDuration),
 				zap.Duration("round_completion_duration", completionDuration),
 				zap.Duration("turn_elapsed", time.Since(turnStartedAt)),
 			)...,
@@ -1158,7 +1147,6 @@ func (m *Manager) onAgentEvents(
 		append(chatTraceFields(state, latest),
 			zap.Int("output_messages", len(outputs)),
 			zap.Int("sent_blocks", sentBlocks),
-			zap.Duration("completion_prompt_duration", completionPromptDuration),
 			zap.Duration("round_completion_duration", completionDuration),
 			zap.Duration("turn_elapsed", time.Since(turnStartedAt)),
 		)...,

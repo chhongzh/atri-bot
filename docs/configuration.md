@@ -53,7 +53,7 @@ atri_cwd: "."
 
 ### default
 
-- `max_rounds` 新用户压缩会话历史前保留的完整 Telegram 轮数，默认 12。之后每个用户可以用 `/ai rounds` 单独修改。一次 TurnLoop 从收到的一组 user 消息开始，包含其间所有 assistant、tool call 和 tool result，直到最终 assistant 回复结束，整体计为一轮。达到上限后会先阻塞新一轮，用该用户自己的模型生成带 cutoff 的 system history。原始轮次继续保留，后续加载只读取最新 system history 与 cutoff 之后的新轮次。
+- `max_rounds` 新用户首次压缩会话历史前保留的完整 Telegram 轮数，默认 12。之后每个用户可以用 `/ai rounds` 单独修改。一次 TurnLoop 从收到的一组 user 消息开始，包含其间所有 assistant、tool call 和 tool result，直到最终 assistant 回复结束，整体计为一轮。达到上限后会先阻塞新一轮，用该用户自己的模型生成带 cutoff 的 system history；此后每完成一轮，就把上一版 system history 与这一轮合并为新版 history。原始轮次继续保留，后续加载只读取最新 system history 与 cutoff 之后的新轮次。
 - `image_max_edge` 新用户图片最长边默认值，默认 1024，最大 2048。用户可用 `/ai image-size` 单独修改。
 - `mcp_max_tools` 每个用户可添加的 MCP provider 上限，默认 128。管理员可用 `/mcp limit` 单独覆盖。
 - `tool_permissions` 新用户的默认工具权限映射。

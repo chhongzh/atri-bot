@@ -213,10 +213,13 @@ func TestToolResultIsCompactedPerMessageRow(t *testing.T) {
 	}
 }
 
-func TestCompleteRoundCompressesAtConfiguredLimit(t *testing.T) {
+func TestCompleteRoundRollsSummaryAfterConfiguredLimit(t *testing.T) {
 	manager, db, logs := newTestManager(t)
-	agent := &recordingAgent{responses: []agentResponse{{message: schema.AssistantMessage(" durable history ", nil)}}}
-	opts := CompressionOptions{MaxRounds: 2, SystemPrompt: "dynamic character prompt", Agent: agent}
+	agent := &recordingAgent{responses: []agentResponse{
+		{message: schema.AssistantMessage(" durable history ", nil)},
+		{message: schema.AssistantMessage(" updated durable history ", nil)},
+	}}
+	opts := CompressionOptions{MaxRounds: 2, Agent: agent}
 	firstID := completeTestRound(t, manager, 9, "character.one", opts, "first", "first reply")
 	if agent.CallCount() != 0 {
 		t.Fatalf("compression calls before limit = %d", agent.CallCount())
@@ -227,29 +230,43 @@ func TestCompleteRoundCompressesAtConfiguredLimit(t *testing.T) {
 	}
 
 	input := agent.Input(0)
-	if input[0].Role != schema.System || input[0].Content != opts.SystemPrompt {
-		t.Fatalf("compression system prompt = %#v", input[0])
-	}
-	if input[len(input)-1].Role != schema.System || !strings.Contains(input[len(input)-1].Content, "2 complete Telegram conversation rounds") {
+	if input[len(input)-1].Role != schema.User || !strings.Contains(input[len(input)-1].Content, "2 newly completed Telegram conversation rounds") {
 		t.Fatalf("compression instruction = %#v", input[len(input)-1])
 	}
-	assertMetadataBeforeEveryUser(t, input[1:len(input)-1])
+	assertMetadataBeforeEveryUser(t, input[:len(input)-1])
+
+	thirdID := completeTestRound(t, manager, 9, "character.one", opts, "third", "third reply")
+	if agent.CallCount() != 2 {
+		t.Fatalf("compression calls after new round = %d, want 2", agent.CallCount())
+	}
+	rollingInput := agent.Input(1)
+	if rollingInput[0].Role != schema.System || rollingInput[0].Content != "durable history" {
+		t.Fatalf("previous summary = %#v", rollingInput[0])
+	}
+	rollingInstruction := rollingInput[len(rollingInput)-1]
+	if rollingInstruction.Role != schema.User ||
+		!strings.Contains(rollingInstruction.Content, "1 newly completed Telegram conversation round") ||
+		!strings.Contains(rollingInstruction.Content, "previous compressed history") {
+		t.Fatalf("rolling compression instruction = %#v", rollingInstruction)
+	}
+	assertMetadataBeforeEveryUser(t, rollingInput[1:len(rollingInput)-1])
+
 	var summaries []model.SessionSummary
 	if err := db.Order("id ASC").Find(&summaries).Error; err != nil {
 		t.Fatal(err)
 	}
-	if len(summaries) != 1 || summaries[0].CutoffRoundID != secondID {
-		t.Fatalf("summaries = %#v, cutoff want %d", summaries, secondID)
+	if len(summaries) != 2 || summaries[0].CutoffRoundID != secondID || summaries[1].CutoffRoundID != thirdID {
+		t.Fatalf("summaries = %#v, cutoffs want %d and %d", summaries, secondID, thirdID)
 	}
 	loaded, err := manager.Load(context.Background(), 9, "character.one", 0, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(loaded) != 1 || loaded[0].Role != schema.System || loaded[0].Content != "durable history" {
+	if len(loaded) != 1 || loaded[0].Role != schema.System || loaded[0].Content != "updated durable history" {
 		t.Fatalf("loaded summary = %#v", loaded)
 	}
 	for _, message := range []string{"session history compression threshold reached", "session history compression started", "session history compression completed"} {
-		if logs.FilterMessage(message).Len() != 1 {
+		if logs.FilterMessage(message).Len() != 2 {
 			t.Fatalf("log %q count = %d", message, logs.FilterMessage(message).Len())
 		}
 	}
@@ -264,7 +281,7 @@ func TestCompressionFailurePreservesMessageRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = manager.CompleteRound(context.Background(), 10, "character.one", roundID, CompressionOptions{
-		MaxRounds: 1, SystemPrompt: "system", Agent: agent,
+		MaxRounds: 1, Agent: agent,
 	}, schema.AssistantMessage("keep reply", nil))
 	if !errors.Is(err, compressErr) {
 		t.Fatalf("compression error = %v, want %v", err, compressErr)
@@ -320,7 +337,7 @@ func TestAppendUserWaitsWhileCompressionRuns(t *testing.T) {
 	completeDone := make(chan error, 1)
 	go func() {
 		completeDone <- manager.CompleteRound(context.Background(), 12, "character.one", roundID, CompressionOptions{
-			MaxRounds: 1, SystemPrompt: "system", Agent: agent,
+			MaxRounds: 1, Agent: agent,
 		}, schema.AssistantMessage("reply", nil))
 	}()
 	select {

@@ -38,9 +38,8 @@ var compressionTemplate string
 var messageMetadataTemplate string
 
 type CompressionOptions struct {
-	MaxRounds    int
-	SystemPrompt string
-	Agent        adk.Agent
+	MaxRounds int
+	Agent     adk.Agent
 }
 
 type sessionKey struct {
@@ -84,7 +83,7 @@ func New(db *gorm.DB, logger *zap.Logger) *Manager {
 	return &Manager{
 		db:              db,
 		logger:          logger,
-		compression:     prompt.FromMessages(schema.Jinja2, schema.SystemMessage(compressionTemplate)),
+		compression:     prompt.FromMessages(schema.Jinja2, schema.UserMessage(compressionTemplate)),
 		messageMetadata: prompt.FromMessages(schema.Jinja2, schema.SystemMessage(messageMetadataTemplate)),
 		locks:           make(map[sessionKey]*sessionLock),
 	}
@@ -351,7 +350,10 @@ func (m *Manager) maybeCompress(
 	opts CompressionOptions,
 	window *historyWindow,
 ) ([]*schema.Message, error) {
-	if len(window.rounds) < maxRounds {
+	if window.summary == nil && len(window.rounds) < maxRounds {
+		return window.messages, nil
+	}
+	if window.summary != nil && len(window.rounds) == 0 {
 		return window.messages, nil
 	}
 	m.logCompressionThreshold(userID, characterID, trigger, len(window.rounds), maxRounds, len(window.messages), window)
@@ -380,15 +382,14 @@ func (m *Manager) compress(
 		zap.Uint("cutoff_round_id", cutoffRoundID),
 		zap.Int("history_messages", len(window.messages)),
 	)
-	instruction, err := m.renderCompressionInstruction(ctx, roundCount)
+	instruction, err := m.renderCompressionInstruction(ctx, roundCount, window.summary != nil)
 	if err != nil {
 		m.logCompressionFailure(userID, characterID, trigger, roundCount, cutoffRoundID, startedAt, err)
 		return nil, err
 	}
-	input := make([]*schema.Message, 0, len(window.messages)+2)
-	input = append(input, schema.SystemMessage(opts.SystemPrompt))
+	input := make([]*schema.Message, 0, len(window.messages)+1)
 	input = append(input, window.messages...)
-	input = append(input, schema.SystemMessage(instruction))
+	input = append(input, instruction)
 
 	response, err := runCompressionAgent(ctx, opts.Agent, input)
 	if err != nil {
@@ -468,15 +469,18 @@ func (m *Manager) logCompressionThreshold(
 	)
 }
 
-func (m *Manager) renderCompressionInstruction(ctx context.Context, roundCount int) (string, error) {
-	messages, err := m.compression.Format(ctx, map[string]any{"RoundCount": roundCount})
+func (m *Manager) renderCompressionInstruction(ctx context.Context, roundCount int, hasPreviousSummary bool) (*schema.Message, error) {
+	messages, err := m.compression.Format(ctx, map[string]any{
+		"RoundCount":         roundCount,
+		"HasPreviousSummary": hasPreviousSummary,
+	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if len(messages) != 1 {
-		return "", errs.ErrCompressionTemplateNoMessage
+		return nil, errs.ErrCompressionTemplateNoMessage
 	}
-	return messages[0].Content, nil
+	return messages[0], nil
 }
 
 func runCompressionAgent(ctx context.Context, agent adk.Agent, input []*schema.Message) (*schema.Message, error) {

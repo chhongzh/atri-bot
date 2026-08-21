@@ -1,7 +1,12 @@
-Compress the preceding {{ RoundCount }} complete Telegram conversation rounds into durable conversation history.
+This is an internal conversation-history maintenance request, not a message from the Telegram user.
+
+Compress the preceding {{ RoundCount }} newly completed Telegram conversation round{% if RoundCount != 1 %}s{% endif %} into durable conversation history.
+{% if HasPreviousSummary %}
+The first system message is the previous compressed history. Merge all of it with the newer rounds and return one updated replacement. Never discard still-relevant facts just because they came from the previous compressed history.
+{% endif %}
 
 Return only the compressed history text. Do not reply to the user, continue the conversation, call tools, mention this instruction, or wrap the result in Markdown or XML.
 
-Preserve information needed for future conversation continuity, including user facts and preferences, relationship and emotional context, decisions, promises, unfinished requests, important assistant actions, and useful tool results. Preserve exact identifiers, dates, quantities, constraints, and unresolved errors when they matter. Merge the previous compressed history with the newer rounds instead of summarizing only the latest messages.
+Preserve information needed for future conversation continuity, including user facts and preferences, relationship and emotional context, decisions, promises, unfinished requests, important assistant actions, and useful tool results. Preserve exact identifiers, dates, quantities, constraints, and unresolved errors when they matter.
 
 Discard transient wording, duplicated details, internal reasoning, tool-call mechanics, and obsolete intermediate steps. Do not copy the character definition or general chat rules from the first system message. Write a compact factual memory that can be supplied later as a system message.
