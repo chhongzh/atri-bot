@@ -12,6 +12,26 @@
 - 保持依赖方向清晰，避免通过全局状态、循环依赖或跨包复制业务逻辑解决问题。
 - 修改前先查找现有抽象，优先复用而不是重复实现。
 
+```
+internal/account: 用户账户相关
+internal/character: 角色提供商相关
+internal/chat: 聊天核心代码, chat manager
+internal/command: 命令实现与command manager
+internal/config: 全局、用户配置加载读取实现
+internal/constants: 全局常量
+internal/errs: 所有internal包下的所有错误，方便复用
+internal/files: LLM文件操作
+internal/mcp: LLM mcp接入实现
+internal/model: gorm数据库模型
+internal/msgops: eino相关实用操作库
+internal/runner: telebot与chat manager对接核心, 程序第一层入口, 主实例
+internal/security: 安全相关, 包括Safe dialer的实现
+internal/session: 上下文管理
+internal/stealth: 浏览器过Bot检测相关
+internal/tools: local tools实现
+internal/utils: 实用函数集合
+```
+
 ### 2. 错误集中管理
 
 - 项目自定义错误统一放在 `internal/errs` 包中。
