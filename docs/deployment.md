@@ -4,7 +4,7 @@ atri-bot 可以直接跑二进制，也可以用 Docker。两种方式都只需�
 
 ## 直接跑二进制
 
-1. 到 [Releases](https://github.com/chhongzh/atri-bot/releases) 页面下载对应平台的压缩包，解压得到一个可执行文件。Windows、macOS、Linux 和 Android（arm64 / amd64）都有构建产物。也可以从源码构建。
+1. 到 [Releases](https://github.com/chhongzh/atri-bot/releases) 页面下载对应平台的 `.tar.gz` 压缩包，解压得到一个可执行文件。Windows、macOS、Linux 和 Android（arm64 / amd64）都有构建产物。也可以从源码构建。
 
 ```bash
 go build -o atri-bot ./cmd/atri-bot

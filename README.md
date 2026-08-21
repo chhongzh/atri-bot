@@ -75,7 +75,7 @@ MCP，内置工具里发送邮件和热点搜索已经能用，其余还在开�
 
 ### 直接跑二进制
 
-1. 下载。到 Releases 页面下载对应平台的压缩包，解压后得到一个可执行文件。Windows、macOS、Linux 和 Android（arm64 / amd64）都有现成的构建产物。也可以从源码构建。
+1. 下载。到 Releases 页面下载对应平台的 `.tar.gz` 压缩包，解压后得到一个可执行文件。Windows、macOS、Linux 和 Android（arm64 / amd64）都有现成的构建产物。也可以从源码构建。
 
 ```bash
 go build -o atri-bot ./cmd/atri-bot

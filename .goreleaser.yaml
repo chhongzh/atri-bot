@@ -63,15 +63,10 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-    # use zip for windows archives
-    format_overrides:
-      - goos: windows
-        formats: [ zip ]
-
   - id: android
     ids: [ android-arm64, android-amd64 ]
-    # Android 不打压缩包，直接发布可执行文件
-    formats: [ binary ]
+    # Android 与桌面端使用相同的 tar.gz 发布格式。
+    formats: [ tar.gz ]
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
 
 dockers_v2:
