@@ -86,7 +86,7 @@ func TestConsumeMessageVariantSendsCompletedBlockBeforeStreamEnds(t *testing.T) 
 		done <- err
 	}()
 
-	if closed := writer.Send(&schema.Message{Role: schema.Assistant, Content: "first block\n"}, nil); closed {
+	if closed := writer.Send(&schema.Message{Role: schema.Assistant, Content: "first block\\m"}, nil); closed {
 		t.Fatal("model stream closed before first chunk")
 	}
 	select {

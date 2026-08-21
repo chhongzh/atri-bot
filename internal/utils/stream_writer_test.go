@@ -21,13 +21,13 @@ func TestAssistantStreamWriterSendsCompletedBlocksImmediately(t *testing.T) {
 	if len(sent) != 0 {
 		t.Fatalf("sent before boundary = %#v", sent)
 	}
-	if err := writer.Write(" block\nsecond"); err != nil {
+	if err := writer.Write(" block\\msecond"); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(sent, []string{"first block"}) {
 		t.Fatalf("sent after boundary = %#v", sent)
 	}
-	if err := writer.Write(" block\nthird"); err != nil {
+	if err := writer.Write(" block\\mthird"); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(sent, []string{"first block", "second block"}) {
@@ -41,14 +41,14 @@ func TestAssistantStreamWriterSendsCompletedBlocksImmediately(t *testing.T) {
 	}
 }
 
-func TestAssistantStreamWriterUnescapesInlineNewlines(t *testing.T) {
+func TestAssistantStreamWriterPreservesInlineNewlines(t *testing.T) {
 	var sent []string
 	writer := NewAssistantStreamWriter(func(text string) error {
 		sent = append(sent, text)
 		return nil
 	})
 
-	if err := writer.Write("第一行\\n第二行\n第三行"); err != nil {
+	if err := writer.Write("第一行\n第二行\\m第三行"); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(sent, []string{"第一行\n第二行"}) {
@@ -62,7 +62,7 @@ func TestAssistantStreamWriterUnescapesInlineNewlines(t *testing.T) {
 	}
 }
 
-func TestAssistantStreamWriterHoldsIncompleteEscapeAcrossChunks(t *testing.T) {
+func TestAssistantStreamWriterHoldsIncompleteBoundaryAcrossChunks(t *testing.T) {
 	var sent []string
 	writer := NewAssistantStreamWriter(func(text string) error {
 		sent = append(sent, text)
@@ -75,16 +75,16 @@ func TestAssistantStreamWriterHoldsIncompleteEscapeAcrossChunks(t *testing.T) {
 	if len(sent) != 0 {
 		t.Fatalf("sent before escape completed = %#v", sent)
 	}
-	if err := writer.Write("n第二行\n第三行"); err != nil {
+	if err := writer.Write("m第二行\n第三行"); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(sent, []string{"第一行\n第二行"}) {
+	if !reflect.DeepEqual(sent, []string{"第一行"}) {
 		t.Fatalf("sent after boundary = %#v", sent)
 	}
 	if err := writer.Flush(); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(sent, []string{"第一行\n第二行", "第三行"}) {
+	if !reflect.DeepEqual(sent, []string{"第一行", "第二行\n第三行"}) {
 		t.Fatalf("sent after flush = %#v", sent)
 	}
 }
@@ -114,7 +114,7 @@ func TestAssistantStreamWriterDropsEmptyBlocks(t *testing.T) {
 		return nil
 	})
 
-	if err := writer.Write("\n第二行\r\n第三行"); err != nil {
+	if err := writer.Write("\\m第二行\\m\\m第三行"); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(sent, []string{"第二行"}) {

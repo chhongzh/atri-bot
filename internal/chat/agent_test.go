@@ -168,8 +168,8 @@ func TestOnAgentEventsSendsCompletedBlockBeforeStreamEnds(t *testing.T) {
 	chunksSent := make(chan bool, 1)
 	go func() {
 		closed := writer.Send(schema.AssistantMessage("第一段", nil), nil)
-		closed = writer.Send(schema.AssistantMessage("\n", nil), nil) || closed
-		closed = writer.Send(schema.AssistantMessage("\n第二段", nil), nil) || closed
+		closed = writer.Send(schema.AssistantMessage("\\", nil), nil) || closed
+		closed = writer.Send(schema.AssistantMessage("m第二段", nil), nil) || closed
 		chunksSent <- closed
 	}()
 	select {
