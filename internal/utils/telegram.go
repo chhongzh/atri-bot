@@ -12,9 +12,9 @@ import (
 
 const telegramTextLimit = 4096
 
-func SendTelegramText(c telebot.Context, text string) error {
+func SendTelegramText(c telebot.Context, text string, opts ...interface{}) error {
 	for _, part := range SplitTelegramText(text, telegramTextLimit) {
-		if err := c.Send(part); err != nil {
+		if err := c.Send(part, opts...); err != nil {
 			return err
 		}
 	}
@@ -22,15 +22,10 @@ func SendTelegramText(c telebot.Context, text string) error {
 }
 
 func SplitTelegramText(text string, limit int) []string {
-	blocks := strings.Split(text, "\n\n")
-	parts := make([]string, 0, len(blocks))
-	for _, block := range blocks {
-		if block == "" {
-			continue
-		}
-		parts = append(parts, splitTelegramTextBlock(block, limit)...)
+	if text == "" {
+		return nil
 	}
-	return parts
+	return splitTelegramTextBlock(text, limit)
 }
 
 func splitTelegramTextBlock(text string, limit int) []string {
@@ -42,8 +37,12 @@ func splitTelegramTextBlock(text string, limit int) []string {
 	for len(runes) > 0 {
 		end := min(limit, len(runes))
 		if end < len(runes) {
-			if newline := strings.LastIndex(string(runes[:end]), "\n"); newline > limit/2 {
-				end = utf8.RuneCountInString(string(runes[:newline+1]))
+			candidate := string(runes[:end])
+			if newline := strings.LastIndex(candidate, "\n"); newline >= 0 {
+				newlineEnd := utf8.RuneCountInString(candidate[:newline+1])
+				if newlineEnd > limit/2 {
+					end = newlineEnd
+				}
 			}
 		}
 		parts = append(parts, string(runes[:end]))
