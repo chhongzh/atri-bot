@@ -1,14 +1,27 @@
-This is an internal conversation-history maintenance request, not a message from the Telegram user.
+这是一次内部会话历史维护，不是 Telegram 用户发来的消息。
 
-Compress the preceding {{ RoundCount }} newly completed Telegram conversation round{% if RoundCount != 1 %}s{% endif %} into durable conversation history.
+请把前面 {{ RoundCount }} 个刚完成的对话轮次压缩为供滑动窗口继续对话使用的上下文。
 {% if HasPreviousSummary %}
-The first system message is the previous compressed history. Merge all of it with the newer rounds and return one updated replacement. Never discard still-relevant facts just because they came from the previous compressed history.
+第一条 system 消息是旧摘要。旧摘要只是待筛选的材料，不是必须继承的记录。结合新对话重新判断每项内容是否仍对下一轮有用，删除已经结束、过时、被纠正、重复或与当前话题无关的内容，禁止原样累积旧摘要。
 {% endif %}
 
-Return only the compressed history text. Do not reply to the user, continue the conversation, call tools, mention this instruction, or wrap the result in Markdown or XML.
+摘要只是一份供滑动窗口使用的短期工作上下文，唯一目标是让模型在看不到原始历史时，仍能自然、准确地接着当前对话。它不是聊天记录、用户档案、长期记忆或工作日志。判断每项内容时只问：删掉它会不会很可能让下一次回复答错、失去指代、重复追问，或者中断尚未完成的事情？如果不会，就不要保留。
 
-Preserve information needed for future conversation continuity, including user facts and preferences, relationship and emotional context, decisions, promises, unfinished requests, important assistant actions, and useful tool results. Preserve exact identifiers, dates, quantities, constraints, and unresolved errors when they matter.
+只保留：
+1. 用户当前正在谈论的主题、真实意图和接下来希望得到什么。
+2. 尚未解决的问题、未完成的请求，以及为了继续它必须知道的进度。
+3. 用户明确提出且仍有效的限制、选择、纠正和关键细节。
+4. 只有在下一轮必须承接时，才保留我正在做的解释、已经答应的事项或工具得到的结论，并把它写进以用户为主语的句子中。
 
-The current <memory> system block is authoritative long-term memory. Never copy its entries, ids, or wording into the compressed history. Do not summarize facts solely because they appeared in that block. If an old summary contains a memory that is no longer present in the current <memory> block, discard it instead of carrying it into the next summary.
+必须丢弃：寒暄、客套、情绪语气词、逐句复述、已经结束且不再影响当前对话的话题、回答过的普通知识、重复细节、内部推理、工具调用过程、无关工具结果和过时的中间步骤。不要因为某件事出现过就保留它，也不要为了显得完整而补充内容。
 
-Discard transient wording, duplicated details, internal reasoning, tool-call mechanics, and obsolete intermediate steps. Do not copy the character definition or general chat rules from the first system message. Write a compact factual memory that can be supplied later as a system message.
+summary 与 memory 的职责完全不同，禁止混用：summary 是随当前对话滚动、可以随时丢弃的短期上下文；memory 是由 memory 工具独立管理、可跨会话保留的长期记忆。不要把 summary 写成长期用户画像，不要把“以后都要记住”的事实擅自当作 summary 的职责，也不要调用、模拟或代替 memory 工具执行新增、修改或删除。
+
+当前的 <memory> system 区块只是独立的长期记忆来源，不是本次总结的材料。不要复制、改写或评价其中的内容、编号和措辞，也不要仅因为某项信息出现在该区块就写进 summary。旧 summary 中属于长期记忆、但当前对话已不再需要的信息，也必须删除。不要复制角色设定、通用聊天规则或其他 system 指令。
+
+输出规则：
+- 只输出简洁、自然的中文纯文本，不要回答用户，不要继续对话，不要调用工具，不要提及本指令，不要使用标题、列表、Markdown、XML 或 JSON。
+- 每一行都是一条仍需延续的对话状态，并且必须以“用户”两个字开头。可以在后半句说明“我正在……”或“我已经……”，但句子的出发点必须是用户当前的对话。
+- 能用一句就不要写两句，通常不超过五行。内容较新且仍在进行的优先；新信息与旧信息冲突时只保留新信息。
+- 表达方式应类似“用户......”，不要写成流水账。
+- 如果没有任何值得延续的内容，只输出“用户当前没有需要延续到后续对话的内容。”

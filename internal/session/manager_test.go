@@ -230,7 +230,11 @@ func TestCompleteRoundRollsSummaryAfterConfiguredLimit(t *testing.T) {
 	}
 
 	input := agent.Input(0)
-	if input[len(input)-1].Role != schema.User || !strings.Contains(input[len(input)-1].Content, "2 newly completed Telegram conversation rounds") {
+	if input[len(input)-1].Role != schema.User ||
+		!strings.Contains(input[len(input)-1].Content, "2 个刚完成的对话轮次") ||
+		!strings.Contains(input[len(input)-1].Content, "每一行都是一条仍需延续的对话状态") ||
+		!strings.Contains(input[len(input)-1].Content, "summary 是随当前对话滚动、可以随时丢弃的短期上下文") ||
+		!strings.Contains(input[len(input)-1].Content, "memory 工具独立管理、可跨会话保留的长期记忆") {
 		t.Fatalf("compression instruction = %#v", input[len(input)-1])
 	}
 	assertMetadataBeforeEveryUser(t, input[:len(input)-1])
@@ -245,8 +249,8 @@ func TestCompleteRoundRollsSummaryAfterConfiguredLimit(t *testing.T) {
 	}
 	rollingInstruction := rollingInput[len(rollingInput)-1]
 	if rollingInstruction.Role != schema.User ||
-		!strings.Contains(rollingInstruction.Content, "1 newly completed Telegram conversation round") ||
-		!strings.Contains(rollingInstruction.Content, "previous compressed history") {
+		!strings.Contains(rollingInstruction.Content, "1 个刚完成的对话轮次") ||
+		!strings.Contains(rollingInstruction.Content, "旧摘要只是待筛选的材料") {
 		t.Fatalf("rolling compression instruction = %#v", rollingInstruction)
 	}
 	assertMetadataBeforeEveryUser(t, rollingInput[1:len(rollingInput)-1])
@@ -257,6 +261,11 @@ func TestCompleteRoundRollsSummaryAfterConfiguredLimit(t *testing.T) {
 	}
 	if len(summaries) != 2 || summaries[0].CutoffRoundID != secondID || summaries[1].CutoffRoundID != thirdID {
 		t.Fatalf("summaries = %#v, cutoffs want %d and %d", summaries, secondID, thirdID)
+	}
+	for _, summary := range summaries {
+		if summary.CompressionVersion != sessionSummaryVersion {
+			t.Fatalf("summary compression version = %d", summary.CompressionVersion)
+		}
 	}
 	loaded, err := manager.Load(context.Background(), 9, "character.one", 0, opts)
 	if err != nil {
@@ -269,6 +278,49 @@ func TestCompleteRoundRollsSummaryAfterConfiguredLimit(t *testing.T) {
 		if logs.FilterMessage(message).Len() != 2 {
 			t.Fatalf("log %q count = %d", message, logs.FilterMessage(message).Len())
 		}
+	}
+}
+
+func TestLoadRecompressesLegacySummary(t *testing.T) {
+	manager, db, _ := newTestManager(t)
+	opts := CompressionOptions{MaxRounds: 10}
+	completeTestRound(t, manager, 15, "character.one", opts, "first", "first reply")
+	cutoffRoundID := completeTestRound(t, manager, 15, "character.one", opts, "second", "second reply")
+
+	legacy, err := makeSessionSummary(15, "character.one", cutoffRoundID, schema.SystemMessage("old noisy archive"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy.CompressionVersion = 0
+	if err = db.Create(&legacy).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	agent := &recordingAgent{responses: []agentResponse{{message: schema.AssistantMessage("用户正在讨论第二个话题。", nil)}}}
+	loaded, err := manager.Load(context.Background(), 15, "character.one", 0, CompressionOptions{MaxRounds: 10, Agent: agent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if agent.CallCount() != 1 {
+		t.Fatalf("compression calls = %d, want 1", agent.CallCount())
+	}
+	input := agent.Input(0)
+	if input[0].Role != schema.System || input[0].Content != "old noisy archive" {
+		t.Fatalf("legacy summary input = %#v", input[0])
+	}
+	if !strings.Contains(input[len(input)-1].Content, "0 个刚完成的对话轮次") {
+		t.Fatalf("compression instruction = %#v", input[len(input)-1])
+	}
+	if len(loaded) != 1 || loaded[0].Content != "用户正在讨论第二个话题。" {
+		t.Fatalf("loaded summary = %#v", loaded)
+	}
+
+	var latest model.SessionSummary
+	if err = db.Order("cutoff_round_id DESC").Order("id DESC").First(&latest).Error; err != nil {
+		t.Fatal(err)
+	}
+	if latest.CutoffRoundID != cutoffRoundID || latest.CompressionVersion != sessionSummaryVersion {
+		t.Fatalf("latest summary = %#v", latest)
 	}
 }
 

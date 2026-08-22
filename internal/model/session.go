@@ -34,12 +34,13 @@ func (SessionMessage) TableName() string {
 }
 
 type SessionSummary struct {
-	ID            uint      `gorm:"primaryKey"`
-	CreatedAt     time.Time `gorm:"not null"`
-	UserID        int64     `gorm:"not null;index:idx_session_summaries_latest,priority:1"`
-	CharacterID   string    `gorm:"size:255;not null;index:idx_session_summaries_latest,priority:2"`
-	CutoffRoundID uint      `gorm:"not null;index:idx_session_summaries_latest,priority:3,sort:desc"`
-	Message       string    `gorm:"type:json;not null"`
+	ID                 uint      `gorm:"primaryKey"`
+	CreatedAt          time.Time `gorm:"not null"`
+	UserID             int64     `gorm:"not null;index:idx_session_summaries_latest,priority:1"`
+	CharacterID        string    `gorm:"size:255;not null;index:idx_session_summaries_latest,priority:2"`
+	CutoffRoundID      uint      `gorm:"not null;index:idx_session_summaries_latest,priority:3,sort:desc"`
+	CompressionVersion int       `gorm:"not null;default:0"`
+	Message            string    `gorm:"type:json;not null"`
 }
 
 func (SessionSummary) TableName() string {

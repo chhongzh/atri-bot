@@ -29,6 +29,7 @@ const (
 	maxPersistedToolResultRunes = 2_000
 	maxPersistedToolRoundRunes  = 8_000
 	toolResultTailRunes         = 400
+	sessionSummaryVersion       = 1
 )
 
 //go:embed compression.j2
@@ -66,7 +67,17 @@ func (w *historyWindow) cutoffRoundID() uint {
 	return w.summary.CutoffRoundID
 }
 
+func (w *historyWindow) summaryVersion() int {
+	if w.summary == nil {
+		return 0
+	}
+	return w.summary.CompressionVersion
+}
+
 func (w *historyWindow) lastRoundID() uint {
+	if len(w.rounds) == 0 {
+		return w.cutoffRoundID()
+	}
 	return w.rounds[len(w.rounds)-1].ID
 }
 
@@ -354,7 +365,7 @@ func (m *Manager) maybeCompress(
 	if window.summary == nil && len(window.rounds) < maxRounds {
 		return window.messages, nil
 	}
-	if window.summary != nil && len(window.rounds) == 0 {
+	if window.summary != nil && window.summary.CompressionVersion >= sessionSummaryVersion && len(window.rounds) == 0 {
 		return window.messages, nil
 	}
 	m.logCompressionThreshold(userID, characterID, trigger, len(window.rounds), maxRounds, len(window.messages), window)
@@ -381,6 +392,7 @@ func (m *Manager) compress(
 		zap.Int("max_rounds", maxRounds),
 		zap.Uint("previous_cutoff_round_id", window.cutoffRoundID()),
 		zap.Uint("cutoff_round_id", cutoffRoundID),
+		zap.Int("previous_summary_version", window.summaryVersion()),
 		zap.Int("history_messages", len(window.messages)),
 	)
 	instruction, err := m.renderCompressionInstruction(ctx, roundCount, window.summary != nil)
@@ -743,10 +755,11 @@ func makeSessionSummary(userID int64, characterID string, cutoffRoundID uint, me
 		return model.SessionSummary{}, err
 	}
 	return model.SessionSummary{
-		UserID:        userID,
-		CharacterID:   characterID,
-		CutoffRoundID: cutoffRoundID,
-		Message:       data,
+		UserID:             userID,
+		CharacterID:        characterID,
+		CutoffRoundID:      cutoffRoundID,
+		CompressionVersion: sessionSummaryVersion,
+		Message:            data,
 	}, nil
 }
 
