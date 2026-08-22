@@ -1251,6 +1251,9 @@ func (m *Manager) watchState(state *UserState, loop *adk.TurnLoop[*Request, *sch
 		)
 	}
 	completionErr := errs.ErrStateStopped
+	if result.ExitReason != nil {
+		completionErr = errors.Join(completionErr, result.ExitReason)
+	}
 	if preemptedByMessage {
 		completionErr = errs.ErrTurnPreempted
 	}
