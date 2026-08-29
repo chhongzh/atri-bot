@@ -26,7 +26,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: 1.27.0-rc.3
+          go-version: 1.27.0
 
 
       # Android 构建使用 NDK clang，以通过 bionic 使用系统 DNS resolver。
