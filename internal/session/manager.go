@@ -29,7 +29,7 @@ const (
 	maxPersistedToolResultRunes = 2_000
 	maxPersistedToolRoundRunes  = 8_000
 	toolResultTailRunes         = 400
-	sessionSummaryVersion       = 1
+	sessionSummaryVersion       = 2
 )
 
 //go:embed compression.j2
@@ -401,15 +401,14 @@ func (m *Manager) compress(
 		return nil, err
 	}
 	input := compressionInput(window, opts.Memory)
-	input, toolHistory := completeToolCallHistory(input)
+	input, toolHistory := flattenToolCallHistory(input)
 	if toolHistory.changed() {
-		m.logger.Info("completed interrupted tool call history for session compression",
+		m.logger.Info("flattened tool call history for session compression",
 			zap.Int64("user_id", userID),
 			zap.String("character_id", characterID),
 			zap.String("trigger", trigger),
-			zap.Int("generated_call_ids", toolHistory.generatedCallIDs),
-			zap.Int("generated_tool_results", toolHistory.generatedResults),
-			zap.Int("discarded_tool_results", toolHistory.discardedResults),
+			zap.Int("tool_calls", toolHistory.toolCalls),
+			zap.Int("tool_results", toolHistory.toolResults),
 		)
 	}
 	input = append(input, instruction)
@@ -575,7 +574,7 @@ func (m *Manager) loadHistoryWindow(ctx context.Context, userID int64, character
 
 	roundsQuery := m.db.WithContext(ctx).
 		Where("user_id = ? AND character_id = ?", userID, characterID)
-	if window.summary != nil {
+	if window.summary != nil && window.summary.CompressionVersion >= sessionSummaryVersion {
 		roundsQuery = roundsQuery.Where("id > ?", window.summary.CutoffRoundID)
 	}
 	if excludedRoundID != 0 {

@@ -308,9 +308,10 @@ func TestLoadRecompressesLegacySummary(t *testing.T) {
 	if input[0].Role != schema.System || input[0].Content != "old noisy archive" {
 		t.Fatalf("legacy summary input = %#v", input[0])
 	}
-	if !strings.Contains(input[len(input)-1].Content, "0 个刚完成的对话轮次") {
+	if !strings.Contains(input[len(input)-1].Content, "2 个刚完成的对话轮次") {
 		t.Fatalf("compression instruction = %#v", input[len(input)-1])
 	}
+	assertMetadataBeforeEveryUser(t, input[1:len(input)-1])
 	if len(loaded) != 1 || loaded[0].Content != "用户正在讨论第二个话题。" {
 		t.Fatalf("loaded summary = %#v", loaded)
 	}

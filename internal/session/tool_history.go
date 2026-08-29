@@ -1,143 +1,122 @@
 package session
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/cloudwego/eino/schema"
 )
 
-const interruptedToolResult = "[tool execution was interrupted before a result was recorded]"
-
-type toolHistoryCompletion struct {
-	generatedCallIDs int
-	generatedResults int
-	discardedResults int
+type flattenedToolHistory struct {
+	toolCalls   int
+	toolResults int
 }
 
-func (c toolHistoryCompletion) changed() bool {
-	return c.generatedCallIDs > 0 || c.generatedResults > 0 || c.discardedResults > 0
+func (h flattenedToolHistory) changed() bool {
+	return h.toolCalls > 0 || h.toolResults > 0
 }
 
-func completeToolCallHistory(messages []*schema.Message) ([]*schema.Message, toolHistoryCompletion) {
-	completed := make([]*schema.Message, 0, len(messages))
-	usedCallIDs := collectToolCallIDs(messages)
-	var completion toolHistoryCompletion
-
-	for messageIndex := 0; messageIndex < len(messages); {
-		message := messages[messageIndex]
-		if message == nil {
-			messageIndex++
-			continue
-		}
-		if message.Role == schema.Tool {
-			completion.discardedResults++
-			messageIndex++
-			continue
-		}
-		if message.Role != schema.Assistant || len(message.ToolCalls) == 0 {
-			completed = append(completed, message)
-			messageIndex++
-			continue
-		}
-
-		assistant := message
-		originalCallIDs := make([]string, len(message.ToolCalls))
-		seenCallIDs := make(map[string]struct{}, len(message.ToolCalls))
-		for callIndex, call := range message.ToolCalls {
-			originalCallIDs[callIndex] = call.ID
-			if call.ID != "" {
-				if _, duplicate := seenCallIDs[call.ID]; !duplicate {
-					seenCallIDs[call.ID] = struct{}{}
-					continue
-				}
-			}
-			if assistant == message {
-				copy := *message
-				copy.ToolCalls = append([]schema.ToolCall(nil), message.ToolCalls...)
-				assistant = &copy
-			}
-			call.ID = nextInterruptedToolCallID(messageIndex, callIndex, usedCallIDs)
-			assistant.ToolCalls[callIndex] = call
-			seenCallIDs[call.ID] = struct{}{}
-			completion.generatedCallIDs++
-		}
-
-		completed = append(completed, assistant)
-		messageIndex++
-		callIndexes := make(map[string][]int, len(assistant.ToolCalls))
-		for callIndex, callID := range originalCallIDs {
-			callIndexes[callID] = append(callIndexes[callID], callIndex)
-		}
-		matchedByCallID := make(map[string]int, len(callIndexes))
-		responses := make([]*schema.Message, len(assistant.ToolCalls))
-		for messageIndex < len(messages) {
-			result := messages[messageIndex]
-			if result == nil {
-				messageIndex++
-				continue
-			}
-			if result.Role != schema.Tool {
-				break
-			}
-			messageIndex++
-			indexes := callIndexes[result.ToolCallID]
-			matched := matchedByCallID[result.ToolCallID]
-			if matched >= len(indexes) {
-				completion.discardedResults++
-				continue
-			}
-			callIndex := indexes[matched]
-			matchedByCallID[result.ToolCallID] = matched + 1
-			if result.ToolCallID != assistant.ToolCalls[callIndex].ID {
-				copy := *result
-				copy.ToolCallID = assistant.ToolCalls[callIndex].ID
-				result = &copy
-			}
-			responses[callIndex] = result
-		}
-		for callIndex, call := range assistant.ToolCalls {
-			if result := responses[callIndex]; result != nil {
-				completed = append(completed, result)
-				continue
-			}
-			completed = append(completed, schema.ToolMessage(
-				interruptedToolResult,
-				call.ID,
-				schema.WithToolName(call.Function.Name),
-			))
-			completion.generatedResults++
-		}
-	}
-
-	return completed, completion
-}
-
-func collectToolCallIDs(messages []*schema.Message) map[string]struct{} {
-	used := make(map[string]struct{})
+func flattenToolCallHistory(messages []*schema.Message) ([]*schema.Message, flattenedToolHistory) {
+	flattened := make([]*schema.Message, 0, len(messages))
+	var history flattenedToolHistory
 	for _, message := range messages {
 		if message == nil {
 			continue
 		}
-		for _, call := range message.ToolCalls {
-			if call.ID != "" {
-				used[call.ID] = struct{}{}
-			}
-		}
-		if message.ToolCallID != "" {
-			used[message.ToolCallID] = struct{}{}
+		switch {
+		case message.Role == schema.Assistant && len(message.ToolCalls) > 0:
+			flattened = append(flattened, flattenAssistantToolCalls(message))
+			history.toolCalls += len(message.ToolCalls)
+		case message.Role == schema.Tool:
+			flattened = append(flattened, flattenToolResult(message))
+			history.toolResults++
+		default:
+			flattened = append(flattened, message)
 		}
 	}
-	return used
+	return flattened, history
 }
 
-func nextInterruptedToolCallID(messageIndex, callIndex int, used map[string]struct{}) string {
-	base := fmt.Sprintf("interrupted_call_%d_%d", messageIndex, callIndex)
-	callID := base
-	for suffix := 2; ; suffix++ {
-		if _, exists := used[callID]; !exists {
-			used[callID] = struct{}{}
-			return callID
-		}
-		callID = fmt.Sprintf("%s_%d", base, suffix)
+func flattenAssistantToolCalls(message *schema.Message) *schema.Message {
+	copy := *message
+	copy.MultiContent = nil
+	copy.UserInputMultiContent = nil
+	copy.AssistantGenMultiContent = nil
+	copy.ToolCalls = nil
+
+	var content strings.Builder
+	content.WriteString(assistantHistoryText(message))
+	if content.Len() > 0 {
+		content.WriteString("\n\n")
 	}
+	content.WriteString("<tool_calls_from_history>\n")
+	for _, call := range message.ToolCalls {
+		fmt.Fprintf(&content, "call_id: %q\ntool_name: %q\narguments: %s\n", call.ID, call.Function.Name, call.Function.Arguments)
+	}
+	content.WriteString("</tool_calls_from_history>")
+	copy.Content = content.String()
+	return &copy
+}
+
+func assistantHistoryText(message *schema.Message) string {
+	if message.Content != "" {
+		return message.Content
+	}
+	var text strings.Builder
+	for _, part := range message.MultiContent {
+		if part.Type == schema.ChatMessagePartTypeText {
+			text.WriteString(part.Text)
+		}
+	}
+	for _, part := range message.AssistantGenMultiContent {
+		if part.Type == schema.ChatMessagePartTypeText {
+			text.WriteString(part.Text)
+		}
+	}
+	return text.String()
+}
+
+func flattenToolResult(message *schema.Message) *schema.Message {
+	copy := *message
+	copy.Role = schema.Assistant
+	copy.Content = fmt.Sprintf(
+		"<tool_result_from_history>\ncall_id: %q\ntool_name: %q\nresult: %s\n</tool_result_from_history>",
+		message.ToolCallID,
+		message.ToolName,
+		toolResultText(message),
+	)
+	copy.MultiContent = nil
+	copy.UserInputMultiContent = nil
+	copy.AssistantGenMultiContent = nil
+	copy.ToolCallID = ""
+	copy.ToolName = ""
+	return &copy
+}
+
+func toolResultText(message *schema.Message) string {
+	if message.Content != "" {
+		return message.Content
+	}
+	var text strings.Builder
+	for _, part := range message.MultiContent {
+		if part.Type == schema.ChatMessagePartTypeText {
+			text.WriteString(part.Text)
+		}
+	}
+	for _, part := range message.UserInputMultiContent {
+		if part.Type == schema.ChatMessagePartTypeText {
+			text.WriteString(part.Text)
+		}
+	}
+	if text.Len() > 0 {
+		return text.String()
+	}
+	if data, err := json.Marshal(message.UserInputMultiContent); err == nil && len(data) > 2 {
+		return string(data)
+	}
+	if data, err := json.Marshal(message.MultiContent); err == nil && len(data) > 2 {
+		return string(data)
+	}
+	return "[tool result contains no textual content]"
 }
