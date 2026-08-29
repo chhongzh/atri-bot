@@ -830,7 +830,7 @@ func (m *Manager) onAgentEvents(
 			firstBlockReadyAt = blockReadyAt
 		}
 		sendStartedAt := time.Now()
-		if err := utils.SendTelegramText(latest.Context, text, telebot.ModeMarkdownV2); err != nil {
+		if err := utils.SendTelegramText(latest.Context, text); err != nil {
 			m.logger.Warn("failed to send assistant stream block",
 				append(chatTraceFields(state, latest),
 					zap.Int("block", sentBlocks+1),
