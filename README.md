@@ -1,3 +1,5 @@
+
+
 <a id="readme-top"></a>
 
 <!-- 项目徽章 -->
@@ -164,7 +166,7 @@ Telegram 里的命令就够，没必要再做一个网页。
 
 ### 发布
 
-在 GitHub Actions 中手动触发 goreleaser 时只构建 snapshot，不创建 Release。推送 tag 时才正式发布。Android 产物在 CI 中用 Android
+在 GitHub Actions 中手动触发 goreleaser 时只构建 snapshot，不创建 Release。推送 tag 时才正式发布。Android amd64 产物在 CI 中用 Android
 NDK 交叉编译。正式发布还会构建 `linux/amd64`、`linux/arm64` 的 Docker 镜像，推送到
 `ghcr.io/chhongzh/atri-bot`，打上版本号和 `latest` 标签。
 
