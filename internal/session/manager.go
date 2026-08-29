@@ -401,6 +401,17 @@ func (m *Manager) compress(
 		return nil, err
 	}
 	input := compressionInput(window, opts.Memory)
+	input, toolHistory := completeToolCallHistory(input)
+	if toolHistory.changed() {
+		m.logger.Info("completed interrupted tool call history for session compression",
+			zap.Int64("user_id", userID),
+			zap.String("character_id", characterID),
+			zap.String("trigger", trigger),
+			zap.Int("generated_call_ids", toolHistory.generatedCallIDs),
+			zap.Int("generated_tool_results", toolHistory.generatedResults),
+			zap.Int("discarded_tool_results", toolHistory.discardedResults),
+		)
+	}
 	input = append(input, instruction)
 
 	response, err := runCompressionAgent(ctx, opts.Agent, input)
