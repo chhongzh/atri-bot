@@ -1,14 +1,10 @@
-// SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
-// SPDX-License-Identifier: MIT
-
-package utils
+package stealth
 
 import (
 	"context"
 	"errors"
 	"fmt"
 
-	"github.com/chhongzh/atri-bot/internal/stealth"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 )
@@ -30,8 +26,4 @@ func NewIncognitoPage(ctx context.Context, browser *rod.Browser) (*rod.Page, fun
 		return errors.Join(page.Close(), incognito.Close())
 	}
 	return page, closePage, nil
-}
-
-func InjectStealth(page *rod.Page) (func() error, error) {
-	return stealth.Inject(page)
 }

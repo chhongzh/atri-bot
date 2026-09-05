@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
 // SPDX-License-Identifier: MIT
 
-package utils
+package chat
 
 import (
 	"reflect"
@@ -10,7 +10,7 @@ import (
 
 func TestAssistantStreamWriterSendsCompletedBlocksImmediately(t *testing.T) {
 	var sent []string
-	writer := NewAssistantStreamWriter(func(text string) error {
+	writer := newAssistantStreamWriter(func(text string) error {
 		sent = append(sent, text)
 		return nil
 	})
@@ -43,7 +43,7 @@ func TestAssistantStreamWriterSendsCompletedBlocksImmediately(t *testing.T) {
 
 func TestAssistantStreamWriterPreservesInlineNewlines(t *testing.T) {
 	var sent []string
-	writer := NewAssistantStreamWriter(func(text string) error {
+	writer := newAssistantStreamWriter(func(text string) error {
 		sent = append(sent, text)
 		return nil
 	})
@@ -64,7 +64,7 @@ func TestAssistantStreamWriterPreservesInlineNewlines(t *testing.T) {
 
 func TestAssistantStreamWriterHoldsIncompleteBoundaryAcrossChunks(t *testing.T) {
 	var sent []string
-	writer := NewAssistantStreamWriter(func(text string) error {
+	writer := newAssistantStreamWriter(func(text string) error {
 		sent = append(sent, text)
 		return nil
 	})
@@ -91,7 +91,7 @@ func TestAssistantStreamWriterHoldsIncompleteBoundaryAcrossChunks(t *testing.T) 
 
 func TestAssistantStreamWriterFlushKeepsTrailingBackslash(t *testing.T) {
 	var sent []string
-	writer := NewAssistantStreamWriter(func(text string) error {
+	writer := newAssistantStreamWriter(func(text string) error {
 		sent = append(sent, text)
 		return nil
 	})
@@ -109,7 +109,7 @@ func TestAssistantStreamWriterFlushKeepsTrailingBackslash(t *testing.T) {
 
 func TestAssistantStreamWriterDropsEmptyBlocks(t *testing.T) {
 	var sent []string
-	writer := NewAssistantStreamWriter(func(text string) error {
+	writer := newAssistantStreamWriter(func(text string) error {
 		sent = append(sent, text)
 		return nil
 	})

@@ -103,7 +103,7 @@ func legacyInputPart(attachment filesmanager.Attachment) schema.ChatMessagePart 
 		return schema.ChatMessagePart{
 			Type: schema.ChatMessagePartTypeAudioURL,
 			AudioURL: &schema.ChatMessageAudioURL{
-				URL:      attachment.Base64,
+				URL:      inlineDataURL(attachment.MIMEType, attachment.Base64),
 				MIMEType: audioFormat(attachment.MIMEType),
 			},
 		}

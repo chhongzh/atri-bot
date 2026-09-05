@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/chhongzh/atri-bot/internal/config"
 	"github.com/chhongzh/atri-bot/internal/constants"
 	"github.com/chhongzh/atri-bot/internal/runner"
 	"github.com/chhongzh/atri-bot/internal/security"
@@ -37,7 +38,7 @@ var (
 
 func main() {
 	app := fx.New(
-		fx.Provide(getConfig),
+		fx.Provide(config.Load),
 		fx.Provide(getLogger),
 		fx.Provide(getDB),
 		fx.Provide(getRestyClient),
@@ -62,7 +63,7 @@ func getLogger() (*zap.Logger, error) {
 	return cfg.Build()
 }
 
-func getDB(cfg *Config, log *zap.Logger) (*gorm.DB, error) {
+func getDB(cfg *config.Config, log *zap.Logger) (*gorm.DB, error) {
 	gormConfig := &gorm.Config{
 		Logger:         utils.NewGormLogger(log),
 		TranslateError: true,
@@ -87,7 +88,7 @@ func getDB(cfg *Config, log *zap.Logger) (*gorm.DB, error) {
 	}
 }
 
-func getRunner(logger *zap.Logger, restyClient *resty.Client, browser *rod.Browser, cfg *Config, db *gorm.DB) *runner.Runner {
+func getRunner(logger *zap.Logger, restyClient *resty.Client, browser *rod.Browser, cfg *config.Config, db *gorm.DB) *runner.Runner {
 	registrars := []tools.Registrar{
 		loadimage.Register,
 		sendimage.Register,
@@ -108,20 +109,20 @@ func getRunner(logger *zap.Logger, restyClient *resty.Client, browser *rod.Brows
 		DefaultToolPermissions: cfg.Default.ToolPermissions,
 		MCPDefaultMaxTools:     cfg.Default.MCPMaxTools,
 		FilesMaxStorageBytes:   int64(cfg.Files.MaxStorageMB) << 20,
-		FilesCleanupAfter:      cfg.Files.cleanupAfter,
+		FilesCleanupAfter:      cfg.Files.CleanupAfterDuration(),
 		AllowPrivateIP:         cfg.Security.AllowPrivateIP,
 		ToolRegistrars:         registrars,
 	}, db)
 }
 
-func getRestyClient(cfg *Config) *resty.Client {
+func getRestyClient(cfg *config.Config) *resty.Client {
 	client := resty.New().
 		SetTransport(security.DefaultSafeHTTPTransport(cfg.Security.AllowPrivateIP)).
 		SetHeader("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36")
 	return client
 }
 
-func getRod(cfg *Config) (*rod.Browser, error) {
+func getRod(cfg *config.Config) (*rod.Browser, error) {
 	if cfg.External.BrowserURL == "" {
 		return nil, nil
 	}

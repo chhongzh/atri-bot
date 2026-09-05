@@ -14,22 +14,23 @@
 
 ```
 internal/account: 用户账户相关
-internal/character: 角色提供商相关
+internal/character: 角色提示词provider相关
 internal/chat: 聊天核心代码, chat manager
 internal/command: 命令实现与command manager
 internal/config: 全局、用户配置加载读取实现
-internal/constants: 全局常量
-internal/errs: 所有internal包下的所有错误，方便复用
+internal/constants: 全局常量，所有的常量都应该放置于此
+internal/errs: 所有internal包下的所有错误，方便复用，所有的error都应该放置于此
 internal/files: LLM文件操作
 internal/mcp: LLM mcp接入实现
-internal/model: gorm数据库模型
+internal/memory: 记忆实现
+internal/model: gorm数据库模型，所有的数据库模型都应该放置于此
 internal/msgops: eino相关实用操作库
 internal/runner: telebot与chat manager对接核心, 程序第一层入口, 主实例
 internal/security: 安全相关, 包括Safe dialer的实现
-internal/session: 上下文管理
+internal/session: 上下文管理，包括上下文压缩等
 internal/stealth: 浏览器过Bot检测相关
 internal/tools: local tools实现
-internal/utils: 实用函数集合
+internal/utils: 实用函数集合，所有的使用函数都应该放置于此
 ```
 
 ### 2. 错误集中管理
@@ -65,4 +66,3 @@ internal/utils: 实用函数集合
 - 保持改动聚焦，保留用户现有工作区改动，不做无关重命名、清理或重构。
 - 遵循现有 Go 命名、构造函数、依赖注入和错误处理风格。
 - 不新增无意义的全局变量；优先通过构造函数传递依赖。
-- 提交前检查是否泄漏敏感信息，以及新增代码是否破坏现有包边界。

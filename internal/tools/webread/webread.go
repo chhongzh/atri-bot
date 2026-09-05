@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"time"
 
+	"github.com/chhongzh/atri-bot/internal/stealth"
 	toolmanager "github.com/chhongzh/atri-bot/internal/tools"
 	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/go-rod/rod"
@@ -61,7 +62,7 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
 	defer cancel()
 
-	page, closePage, err := utils.NewIncognitoPage(ctx, browser)
+	page, closePage, err := stealth.NewIncognitoPage(ctx, browser)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open incognito page")
 	}
@@ -72,7 +73,7 @@ func tool(ctx context.Context, runningState *toolmanager.RunningState, cfg *conf
 		}
 	}()
 
-	remove, err := utils.InjectStealth(page)
+	remove, err := stealth.Inject(page)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to install stealth script")
 	}

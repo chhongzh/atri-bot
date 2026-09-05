@@ -14,7 +14,6 @@ import (
 
 	"github.com/chhongzh/atri-bot/internal/errs"
 	"github.com/chhongzh/atri-bot/internal/model"
-	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/cloudwego/eino/components/prompt"
 	"github.com/cloudwego/eino/schema"
 	"go.uber.org/zap"
@@ -78,9 +77,9 @@ func (m *Manager) Init(ctx context.Context) error {
 		remote := model.Provider{
 			ID:      "remote-default",
 			Kind:    model.ProviderRemote,
-			URL:     utils.NormalizeGitRepoURL(m.cfg.RemoteURL),
+			URL:     normalizeGitRepoURL(m.cfg.RemoteURL),
 			Branch:  m.cfg.RemoteBranch,
-			Path:    utils.GetProviderPath(m.cfg.CWD, "remote-default", m.cfg.RemoteURL, m.cfg.RemoteBranch),
+			Path:    providerPath(m.cfg.CWD, "remote-default", m.cfg.RemoteURL, m.cfg.RemoteBranch),
 			BuiltIn: true,
 			Enabled: true,
 		}
@@ -217,7 +216,7 @@ func (m *Manager) AddRemote(ctx context.Context, id, url, branch string) error {
 		Kind:    model.ProviderRemote,
 		URL:     url,
 		Branch:  branch,
-		Path:    utils.GetProviderPath(m.cfg.CWD, id, url, branch),
+		Path:    providerPath(m.cfg.CWD, id, url, branch),
 		Enabled: true,
 	}
 	if err := m.db.WithContext(ctx).Create(&record).Error; err != nil {
@@ -241,7 +240,7 @@ func (m *Manager) UpdateRemote(ctx context.Context, id, url, branch string) erro
 	updates := map[string]any{
 		"url":    url,
 		"branch": strings.TrimSpace(branch),
-		"path":   utils.GetProviderPath(m.cfg.CWD, id, url, branch),
+		"path":   providerPath(m.cfg.CWD, id, url, branch),
 	}
 	if err := m.db.WithContext(ctx).Model(&record).Updates(updates).Error; err != nil {
 		return err
@@ -264,7 +263,7 @@ func (m *Manager) Remove(ctx context.Context, id string) error {
 }
 
 func normalizeRemoteURL(url string) (string, error) {
-	url = utils.NormalizeGitRepoURL(url)
+	url = normalizeGitRepoURL(url)
 	if url == "" {
 		return "", errs.ErrRemoteURLEmpty
 	}

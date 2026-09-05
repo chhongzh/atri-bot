@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
 // SPDX-License-Identifier: MIT
 
-package main
+package config
 
 import (
 	"strings"
@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Config 是对应 config.yaml 的语义化运行配置。
+// Config is the semantic runtime configuration mapped from config.yaml.
 type Config struct {
 	Telegram TelegramConfig `mapstructure:"telegram"`
 	Default  DefaultConfig  `mapstructure:"default"`
@@ -55,7 +55,11 @@ type FilesConfig struct {
 	cleanupAfter time.Duration
 }
 
-func getConfig() (*Config, error) {
+func (c FilesConfig) CleanupAfterDuration() time.Duration {
+	return c.cleanupAfter
+}
+
+func Load() (*Config, error) {
 	v := viper.New()
 	v.SetConfigName("config")
 	v.SetConfigType("yaml")

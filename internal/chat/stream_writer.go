@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 chhongzh <szchzcn@gmail.com>
 // SPDX-License-Identifier: MIT
 
-package utils
+package chat
 
 import "strings"
 
@@ -11,16 +11,16 @@ import "strings"
 // A backslash followed by the letter m ("\m") separates two messages.
 // Literal newline characters remain inside the current message, and empty
 // blocks are dropped.
-type AssistantStreamWriter struct {
+type assistantStreamWriter struct {
 	pending string
 	send    func(string) error
 }
 
-func NewAssistantStreamWriter(send func(string) error) *AssistantStreamWriter {
-	return &AssistantStreamWriter{send: send}
+func newAssistantStreamWriter(send func(string) error) *assistantStreamWriter {
+	return &assistantStreamWriter{send: send}
 }
 
-func (w *AssistantStreamWriter) Write(text string) error {
+func (w *assistantStreamWriter) Write(text string) error {
 	w.pending += text
 	for {
 		block, rest, ok := splitMessages(w.pending, false)
@@ -36,11 +36,11 @@ func (w *AssistantStreamWriter) Write(text string) error {
 	}
 }
 
-func (w *AssistantStreamWriter) Seal() error {
+func (w *assistantStreamWriter) Seal() error {
 	return w.Flush()
 }
 
-func (w *AssistantStreamWriter) Flush() error {
+func (w *assistantStreamWriter) Flush() error {
 	if w.pending == "" {
 		return nil
 	}
@@ -54,7 +54,7 @@ func (w *AssistantStreamWriter) Flush() error {
 	return nil
 }
 
-func (w *AssistantStreamWriter) Discard() {
+func (w *assistantStreamWriter) Discard() {
 	w.pending = ""
 }
 

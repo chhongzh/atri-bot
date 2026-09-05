@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 
 	"github.com/chhongzh/atri-bot/internal/model"
-	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 )
@@ -23,7 +22,7 @@ type RemoteProvider struct {
 }
 
 func NewRemoteProvider(id, url, branch, root string) *RemoteProvider {
-	return &RemoteProvider{id: id, url: utils.NormalizeGitRepoURL(url), branch: branch, root: root}
+	return &RemoteProvider{id: id, url: normalizeGitRepoURL(url), branch: branch, root: root}
 }
 
 func (p *RemoteProvider) ID() string {

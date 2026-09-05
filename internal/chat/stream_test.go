@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/chhongzh/atri-bot/internal/msgops"
-	"github.com/chhongzh/atri-bot/internal/utils"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
 )
@@ -75,7 +74,7 @@ func TestConsumeMessageVariantSendsCompletedBlockBeforeStreamEnds(t *testing.T) 
 	}
 	sent := make(chan string, 1)
 	done := make(chan error, 1)
-	streamWriter := utils.NewAssistantStreamWriter(func(text string) error {
+	streamWriter := newAssistantStreamWriter(func(text string) error {
 		sent <- text
 		return nil
 	})
@@ -118,7 +117,7 @@ func TestConsumeMessageVariantFlushesTextBeforeToolCallCompletes(t *testing.T) {
 	}
 	sent := make(chan string, 1)
 	done := make(chan error, 1)
-	streamWriter := utils.NewAssistantStreamWriter(func(text string) error {
+	streamWriter := newAssistantStreamWriter(func(text string) error {
 		sent <- text
 		return nil
 	})

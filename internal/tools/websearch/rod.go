@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/chhongzh/atri-bot/internal/utils"
+	"github.com/chhongzh/atri-bot/internal/stealth"
 	"github.com/go-rod/rod"
 )
 
@@ -20,13 +20,13 @@ func SearchWithBrowser(ctx context.Context, browser *rod.Browser, query string) 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	page, closePage, err := utils.NewIncognitoPage(ctx, browser)
+	page, closePage, err := stealth.NewIncognitoPage(ctx, browser)
 	if err != nil {
 		return nil, fmt.Errorf("open incognito page: %w", err)
 	}
 	defer func() { _ = closePage() }()
 
-	if _, err := utils.InjectStealth(page); err != nil {
+	if _, err := stealth.Inject(page); err != nil {
 		return nil, fmt.Errorf("inject stealth script: %w", err)
 	}
 
